@@ -2,6 +2,7 @@ import React from 'react';
 import useMusicStore from '../store/MusicStore';
 import { SERVER_URL } from '../api';
 import PlayerModal from './PlayerModal';
+import QueueView from './QueueView';
 import { useState } from 'react';
 
 const VolumeIcon = ({ volume }) => {
@@ -26,13 +27,25 @@ const VolumeIcon = ({ volume }) => {
   );
 };
 
+const QueueIcon = ({ active }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? '#1ed760' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="8" y1="6" x2="21" y2="6"/>
+    <line x1="8" y1="12" x2="21" y2="12"/>
+    <line x1="8" y1="18" x2="21" y2="18"/>
+    <line x1="3" y1="6" x2="3.01" y2="6"/>
+    <line x1="3" y1="12" x2="3.01" y2="12"/>
+    <line x1="3" y1="18" x2="3.01" y2="18"/>
+  </svg>
+);
+
 export default function PlayerBar() {
   const {
     currentSong, isPlaying, position, duration,
     pauseSong, resumeSong, playNext, playPrevious,
-    volume, setVolume,
+    volume, setVolume, queue,
   } = useMusicStore();
   const [modalOpen, setModalOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
 
   if (!currentSong) return null;
 
@@ -85,8 +98,17 @@ export default function PlayerBar() {
             </button>
           </div>
 
-          {/* Volume always visible */}
+          {/* Cola + Volumen */}
           <div style={styles.right}>
+            <button
+              style={{ ...styles.queueBtn, ...(queueOpen ? styles.queueBtnActive : {}) }}
+              onClick={() => setQueueOpen(v => !v)}
+              title="Cola de reproducción"
+            >
+              <QueueIcon active={queueOpen} />
+              {queue.length > 0 && <span style={styles.queueBadge}>{queue.length}</span>}
+            </button>
+
             <div style={styles.volWrap}>
               <button
                 style={styles.volBtn}
@@ -113,6 +135,7 @@ export default function PlayerBar() {
       </div>
 
       {modalOpen && <PlayerModal onClose={() => setModalOpen(false)} />}
+      {queueOpen && <QueueView onClose={() => setQueueOpen(false)} />}
 
       <style>{`
         @keyframes eq1 { 0%, 100% { height: 4px; } 50% { height: 14px; } }
@@ -172,7 +195,21 @@ const styles = {
     borderRadius: '50%', boxShadow: '0 0 16px rgba(30,215,96,0.3)',
   },
 
-  right: { flex: 1, display: 'flex', justifyContent: 'flex-end' },
+  right: { flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 },
+
+  queueBtn: {
+    position: 'relative', background: '#1a1a1a', border: '1px solid #252525',
+    borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
+    color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  queueBtnActive: { background: '#1ed76015', borderColor: '#1ed76050' },
+  queueBadge: {
+    position: 'absolute', top: -4, right: -4,
+    background: '#1ed760', color: '#000', fontSize: 10, fontWeight: 800,
+    borderRadius: 10, minWidth: 16, height: 16, padding: '0 4px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+  },
+
   volWrap: {
     display: 'flex', alignItems: 'center', gap: 8,
     background: '#1a1a1a', border: '1px solid #252525',

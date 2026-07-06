@@ -1,5 +1,4 @@
- 
-import React from 'react';
+import React, { useState } from 'react';
 import useMusicStore from '../store/MusicStore';
 import { SERVER_URL } from '../api';
 
@@ -10,8 +9,16 @@ const fmt = (s) => {
 };
 
 export default function FavoritesView() {
-  const { songs, favorites, playSong, toggleFavorite, currentSong, playShuffle } = useMusicStore();
+  const { songs, favorites, playSong, toggleFavorite, currentSong, playShuffle, addToQueue, addManyToQueue } = useMusicStore();
   const favSongs = songs.filter(s => favorites.includes(s.id));
+  const [queuedId, setQueuedId] = useState(null);
+
+  const handleAddToQueue = (song, e) => {
+    e.stopPropagation();
+    addToQueue(song);
+    setQueuedId(song.id);
+    setTimeout(() => setQueuedId(null), 900);
+  };
 
   return (
     <div style={styles.container}>
@@ -22,6 +29,9 @@ export default function FavoritesView() {
         </div>
         {favSongs.length > 0 && (
           <div style={styles.headerActions}>
+            <button style={styles.queueAllBtn} onClick={() => addManyToQueue(favSongs)}>
+              + Agregar todo a la cola
+            </button>
             <button style={styles.shuffleBtn} onClick={() => playShuffle(favSongs)}>
               🔀 Aleatorio
             </button>
@@ -36,6 +46,7 @@ export default function FavoritesView() {
         {favSongs.map((song, index) => {
           const isActive = currentSong?.id === song.id;
           const cover = song.coverUrl ? `${SERVER_URL}${song.coverUrl}` : null;
+          const justQueued = queuedId === song.id;
           return (
             <div
               key={song.id}
@@ -55,6 +66,15 @@ export default function FavoritesView() {
                 </span>
                 <span style={styles.songArtist}>{song.artist} · {fmt(song.duration)}</span>
               </div>
+              <button
+                style={{ ...styles.favBtn, ...(justQueued ? { color: '#1ed760' } : {}) }}
+                onClick={e => handleAddToQueue(song, e)}
+                title="Agregar a la cola"
+              >
+                <span style={{ color: justQueued ? '#1ed760' : '#555', fontSize: 18 }}>
+                  {justQueued ? '✓' : '+'}
+                </span>
+              </button>
               <button
                 style={styles.favBtn}
                 onClick={e => { e.stopPropagation(); toggleFavorite(song.id); }}
@@ -82,7 +102,12 @@ const styles = {
   header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '28px 28px 16px' },
   title: { fontSize: 28, fontWeight: 800, color: '#fff', letterSpacing: -0.5, margin: 0 },
   sub: { fontSize: 12, color: '#555', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
-  headerActions: { display: 'flex', gap: 10, alignItems: 'center' },
+  headerActions: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' },
+  queueAllBtn: {
+    background: 'none', border: '1px solid #333',
+    borderRadius: 20, padding: '8px 14px',
+    color: '#aaa', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+  },
   shuffleBtn: {
     background: 'none', border: '1px solid #1ed76055',
     borderRadius: 20, padding: '8px 16px',

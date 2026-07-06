@@ -1,4 +1,3 @@
- 
 import React, { useState, useEffect } from 'react';
 import useMusicStore from '../store/MusicStore';
 import { SERVER_URL } from '../api';
@@ -10,7 +9,10 @@ const fmt = (s) => {
 };
 
 export default function SongsView() {
-  const { songs, fetchSongs, fetchListeners, playSong, toggleFavorite, favorites, currentSong, activeListeners, updateSong, uploadCover } = useMusicStore();
+  const {
+    songs, fetchSongs, fetchListeners, playSong, toggleFavorite, favorites,
+    currentSong, activeListeners, updateSong, uploadCover, addToQueue,
+  } = useMusicStore();
   const [search, setSearch] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [editSong, setEditSong] = useState(null);
@@ -18,6 +20,7 @@ export default function SongsView() {
   const [editArtist, setEditArtist] = useState('');
   const [editAlbum, setEditAlbum] = useState('');
   const [saving, setSaving] = useState(false);
+  const [queuedId, setQueuedId] = useState(null);
 
   useEffect(() => {
     fetchListeners();
@@ -36,6 +39,13 @@ export default function SongsView() {
     setSyncing(true);
     await fetchSongs();
     setSyncing(false);
+  };
+
+  const handleAddToQueue = (song, e) => {
+    e.stopPropagation();
+    addToQueue(song);
+    setQueuedId(song.id);
+    setTimeout(() => setQueuedId(null), 900);
   };
 
   const openEdit = (song, e) => {
@@ -100,6 +110,7 @@ export default function SongsView() {
           const isActive = currentSong?.id === song.id;
           const isFav = favorites.includes(song.id);
           const cover = song.coverUrl ? `${SERVER_URL}${song.coverUrl}` : null;
+          const justQueued = queuedId === song.id;
 
           return (
             <div
@@ -120,6 +131,11 @@ export default function SongsView() {
                 </span>
                 <span style={styles.songArtist}>{song.artist} · {fmt(song.duration)}</span>
               </div>
+              <button
+                style={{ ...styles.iconBtn, ...(justQueued ? { color: '#1ed760' } : {}) }}
+                onClick={e => handleAddToQueue(song, e)}
+                title="Agregar a la cola"
+              >{justQueued ? '✓' : '+'}</button>
               <button
                 style={styles.iconBtn}
                 onClick={e => openEdit(song, e)}

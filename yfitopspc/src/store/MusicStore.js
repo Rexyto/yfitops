@@ -107,6 +107,7 @@ const useMusicStore = create((set, get) => ({
   currentPlaylist: [],
   currentIndex: 0,
   volume: 1,
+  queue: [], // ── Cola de reproducción (independiente de currentPlaylist) ──
 
   login: async (token, username) => {
     console.log('🔑 Iniciando login...', { token: token?.substring(0, 20) + '...', username });
@@ -131,6 +132,7 @@ const useMusicStore = create((set, get) => ({
       token: null, username: null,
       songs: [], favorites: [], playlists: [], folderPlaylists: [],
       currentSong: null, isPlaying: false, position: 0, duration: 0,
+      queue: [],
     });
   },
 
@@ -209,9 +211,11 @@ const useMusicStore = create((set, get) => ({
     _audio.addEventListener('timeupdate',     () => set({ position: _audio.currentTime * 1000 }));
     _audio.addEventListener('loadedmetadata', () => set({ duration: _audio.duration * 1000 }));
     _audio.addEventListener('ended', () => {
-      const { isLooping, currentIndex, currentPlaylist } = get();
+      const { isLooping } = get();
       if (isLooping) { _audio.currentTime = 0; _audio.play(); return; }
-      get().playSong(currentPlaylist[(currentIndex + 1) % currentPlaylist.length], currentPlaylist);
+      // playNext ya mira primero la cola de reproducción; si está vacía,
+      // sigue con la playlist/contexto actual.
+      get().playNext();
     });
     _audio.addEventListener('play',  () => {
       set({ isPlaying: true });
@@ -260,7 +264,16 @@ const useMusicStore = create((set, get) => ({
   },
 
   playNext: () => {
-    const { currentPlaylist, currentIndex } = get();
+    const { queue, currentPlaylist, currentIndex } = get();
+
+    // Si hay canciones en la cola, tienen prioridad sobre la playlist actual
+    if (queue.length > 0) {
+      const [next, ...rest] = queue;
+      set({ queue: rest });
+      get().playSong(next, currentPlaylist.length ? currentPlaylist : [next]);
+      return;
+    }
+
     if (!currentPlaylist.length) return;
     get().playSong(currentPlaylist[(currentIndex + 1) % currentPlaylist.length], currentPlaylist);
   },
@@ -285,6 +298,46 @@ const useMusicStore = create((set, get) => ({
     if (!songs.length) return;
     const shuffled = shuffle(songs);
     get().playSong(shuffled[0], shuffled);
+  },
+
+  // ── Cola de reproducción ──────────────────────────────────
+
+  // Añade una canción al final de la cola
+  addToQueue: (song) => {
+    set(state => ({ queue: [...state.queue, song] }));
+  },
+
+  // Añade varias canciones de golpe (ej. "añadir toda la playlist a la cola")
+  addManyToQueue: (songs) => {
+    set(state => ({ queue: [...state.queue, ...songs] }));
+  },
+
+  // Quita una canción de la cola por posición
+  removeFromQueue: (index) => {
+    set(state => ({ queue: state.queue.filter((_, i) => i !== index) }));
+  },
+
+  // Vacía la cola entera
+  clearQueue: () => set({ queue: [] }),
+
+  // Reordena la cola (drag&drop o botones ↑/↓)
+  moveQueueItem: (fromIndex, toIndex) => {
+    set(state => {
+      if (toIndex < 0 || toIndex >= state.queue.length) return {};
+      const q = [...state.queue];
+      const [item] = q.splice(fromIndex, 1);
+      q.splice(toIndex, 0, item);
+      return { queue: q };
+    });
+  },
+
+  // Reproduce inmediatamente una canción concreta de la cola y la quita de ahí
+  playFromQueue: (index) => {
+    const { queue, currentPlaylist } = get();
+    const song = queue[index];
+    if (!song) return;
+    set({ queue: queue.filter((_, i) => i !== index) });
+    get().playSong(song, currentPlaylist.length ? currentPlaylist : [song]);
   },
 }));
 

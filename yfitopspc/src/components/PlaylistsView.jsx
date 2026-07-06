@@ -1,4 +1,3 @@
- 
 import React, { useState } from 'react';
 import useMusicStore from '../store/MusicStore';
 import { SERVER_URL } from '../api';
@@ -56,9 +55,10 @@ function PlaylistCard({ playlist, type, onClick }) {
 
 // ── Vista detalle de playlist ────────────────────────────────
 function PlaylistDetail({ playlist, songs, onBack }) {
-  const { playSong, playShuffle, toggleFavorite, favorites } = useMusicStore();
+  const { playSong, playShuffle, toggleFavorite, favorites, addToQueue, addManyToQueue } = useMusicStore();
   const [search, setSearch] = useState('');
   const [searchVisible, setSearchVisible] = useState(false);
+  const [queuedId, setQueuedId] = useState(null);
 
   const allSongs = songs;
   const filtered = search.trim()
@@ -70,6 +70,13 @@ function PlaylistDetail({ playlist, songs, onBack }) {
 
   const color = playlist.coverColor || '#1ed760';
   const cover = playlist.coverUrl ? `${SERVER_URL}${playlist.coverUrl}` : null;
+
+  const handleAddToQueue = (song, e) => {
+    e.stopPropagation();
+    addToQueue(song);
+    setQueuedId(song.id);
+    setTimeout(() => setQueuedId(null), 900);
+  };
 
   return (
     <div style={styles.detailContainer}>
@@ -95,6 +102,13 @@ function PlaylistDetail({ playlist, songs, onBack }) {
         </button>
         <button style={{ ...styles.playAllBtn, background: color }} onClick={() => allSongs.length > 0 && playSong(allSongs[0], allSongs)}>
           ▶ Play
+        </button>
+        <button
+          style={styles.queueAllBtn}
+          onClick={() => addManyToQueue(allSongs)}
+          title="Agregar toda la lista a la cola"
+        >
+          + Cola
         </button>
         <button
           style={{ ...styles.searchToggleBtn, background: searchVisible ? color + '22' : 'transparent', borderColor: color + '44' }}
@@ -127,6 +141,7 @@ function PlaylistDetail({ playlist, songs, onBack }) {
           const isActive = currentSong?.id === song.id;
           const isFav = favorites.includes(song.id);
           const songCover = song.coverUrl ? `${SERVER_URL}${song.coverUrl}` : null;
+          const justQueued = queuedId === song.id;
 
           return (
             <div
@@ -145,6 +160,15 @@ function PlaylistDetail({ playlist, songs, onBack }) {
                 <span style={{ ...styles.songTitle, ...(isActive ? { color } : {}) }}>{song.title}</span>
                 <span style={styles.songArtist}>{song.artist} · {fmt(song.duration)}</span>
               </div>
+              <button
+                style={styles.favBtn}
+                onClick={e => handleAddToQueue(song, e)}
+                title="Agregar a la cola"
+              >
+                <span style={{ color: justQueued ? '#1ed760' : '#555', fontSize: 16 }}>
+                  {justQueued ? '✓' : '+'}
+                </span>
+              </button>
               <button
                 style={styles.favBtn}
                 onClick={e => { e.stopPropagation(); toggleFavorite(song.id); }}
@@ -280,7 +304,7 @@ const styles = {
   heroTitle: { color: '#fff', fontSize: 24, fontWeight: 800, margin: '0 0 4px', letterSpacing: -0.5 },
   heroMeta: { color: '#aaa', fontSize: 13 },
 
-  actionRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px 6px' },
+  actionRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px 6px', flexWrap: 'wrap' },
   shuffleBtn: {
     background: 'none', borderRadius: 20, padding: '8px 16px',
     fontSize: 13, fontWeight: 700, cursor: 'pointer', border: '1px solid',
@@ -288,6 +312,10 @@ const styles = {
   playAllBtn: {
     border: 'none', borderRadius: 20, padding: '8px 20px',
     color: '#000', fontSize: 13, fontWeight: 800, cursor: 'pointer',
+  },
+  queueAllBtn: {
+    background: 'none', border: '1px solid #333', borderRadius: 20,
+    padding: '8px 16px', color: '#aaa', fontSize: 13, fontWeight: 700, cursor: 'pointer',
   },
   searchToggleBtn: {
     border: '1px solid', borderRadius: 20, padding: '8px 12px',
