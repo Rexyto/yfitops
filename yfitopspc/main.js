@@ -7,6 +7,12 @@ const isDev = !app.isPackaged;
 
 const tokenPath = path.join(app.getPath('userData'), 'session.json');
 
+// Icono según plataforma: .ico solo lo renderiza bien Windows,
+// en Linux (barra de tareas, dock, alt-tab) hace falta un .png.
+const iconPath = process.platform === 'win32'
+  ? path.join(__dirname, 'assets', 'icon.ico')
+  : path.join(__dirname, 'assets', 'icon.png');
+
 function readPersistedToken() {
   try {
     const data = JSON.parse(fs.readFileSync(tokenPath, 'utf-8'));
@@ -38,7 +44,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    icon: path.join(__dirname, 'assets', 'icon.ico'),
+    icon: iconPath,
   });
 
   win.loadFile(path.join(__dirname, 'dist', 'index.html'));

@@ -2,12 +2,16 @@
   "name": "yfitops-pc",
   "version": "1.0.0",
   "description": "YFitops Desktop",
+  "author": "Rexy_130",
+  "homepage": "https://yfitops.duckdns.org",
   "main": "main.js",
   "scripts": {
     "start": "webpack --mode development && electron .",
     "watch": "concurrently \"webpack --watch --mode development\" \"electron .\"",
     "build": "webpack --mode production",
-    "dist": "npm run build && electron-builder --win --x64"
+    "dist": "npm run build && electron-builder --win --x64",
+    "dist:linux": "npm run build && electron-builder --linux --x64",
+    "dist:all": "npm run build && electron-builder --win --linux --x64"
   },
   "build": {
     "appId": "com.yfitops.pc",
@@ -25,6 +29,13 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "YFitops"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "assets/icon.png",
+      "category": "Audio",
+      "executableName": "yfitops",
+      "maintainer": "YFitops"
     },
     "files": [
       "dist/**/*",

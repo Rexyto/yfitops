@@ -1,6 +1,6 @@
 # YFitops
 
-> Ecosistema multiplataforma de música: servidor backend, app de escritorio para Windows, panel web administrativo y bots.
+> Ecosistema multiplataforma de música: servidor backend, app de escritorio para Windows, panel web administrativo y bots. (Por ahora no se sube el código de la app móvil.)
 
 ---
 
@@ -14,7 +14,7 @@
 - [Arranque](#arranque)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Carpeta data/](#carpeta-data)
-- [App de Windows (PC)](#app-de-windows-pc)
+- [App de escritorio (Windows y Linux)](#app-de-escritorio-windows-y-linux)
 - [APIs](#apis)
 - [Seguridad](#seguridad)
 - [Sincronización de carpetas](#sincronización-de-carpetas)
@@ -267,7 +267,7 @@ Esta es la ruta real del repositorio, tal cual queda en disco:
 yfitops/
 ├── API_DOCUMENTATION.md        # Documentación detallada de todos los endpoints (ver sección APIs)
 ├── README.md
-├── app/                        # App móvil (Android) —  Próximamente
+├── app/                        # App móvil (Android) —  Próximamente.
 ├── servidor/                   # Backend (Node.js + Express + MySQL)
 │   ├── server.js               # Punto de entrada del backend
 │   ├── package.json
@@ -301,7 +301,7 @@ yfitops/
 │   ├── node_modules/              # Dependencias (no versionar)
 │   └── web/                       # Panel administrativo React/Vite
 │
-└── yfitopspc/                   # App de escritorio para Windows (Electron), solo disponible para Windows
+└── yfitopspc/                   # App de escritorio Electron — genera tanto el instalador de Windows como el binario de Linux
     ├── main.js                  # Proceso principal de Electron
     ├── preload.js               # Puente seguro entre Electron y el renderer (contextBridge)
     ├── discordRpc.js            # Discord Rich Presence ("reproduciendo ahora")
@@ -355,16 +355,19 @@ Esta carpeta se crea sola al arrancar el servidor (`fs.mkdir(DATA_DIR, { recursi
 
 ---
 
-## App de Windows (PC)
+## App de escritorio (Windows y Linux)
 
->  Solo disponible para **Windows**.
+>  El código de la app móvil (Android) no se sube por ahora. La app de escritorio sí, y **es la misma para Windows y Linux** — no hace falta duplicar carpetas ni código.
 
 La app de escritorio (`yfitopspc/`) es una aplicación **Electron + React** que vive justo al lado de `servidor/`, dentro de la misma ruta del proyecto. Se conecta al backend a través de las rutas `/pc/*` documentadas en [APIs](#apis).
+
+Electron es multiplataforma: el mismo `src/`, `main.js`, `preload.js` y `discordRpc.js` funcionan igual en Windows y en Linux. Lo único que cambia es **cómo se empaqueta** el resultado final (`.exe`/instalador para Windows, `AppImage`/`.deb` para Linux), no el código fuente. Por eso no se crea una carpeta `yfitopslinux/` aparte: todo sigue viviendo en `yfitopspc/`.
 
 ### Requisitos
 
 - Node.js 18+
-- Windows 10/11 (target de compilación)
+- Para compilar el `.exe`: Windows 10/11.
+- Para compilar el binario de Linux: una máquina/VM/WSL2 con Linux (ver el porqué más abajo).
 
 ### Instalación y arranque en desarrollo
 
@@ -374,16 +377,114 @@ npm install
 npm run start      # o el script equivalente de tu package.json (dev con webpack + electron)
 ```
 
-### Build / generar instalador
+### Configurar los targets de build (una sola vez)
 
-El build del renderer se genera con `webpack.config.js` hacia `dist/`, y el empaquetado final del `.exe`/instalador se genera en `release/` (normalmente vía `electron-builder` o similar, según lo que tengas configurado en `package.json`).
+`electron-builder` (o el bundler que tengas en `release/`) soporta definir varios targets en el mismo `package.json`, sin tocar el código:
 
-```bash
-npm run build       # compila el renderer (React) a dist/
-npm run dist        # empaqueta el ejecutable/instalador en release/
+```json
+"build": {
+  "appId": "com.yfitops.app",
+  "productName": "YFitops",
+  "files": ["dist/**/*", "main.js", "preload.js", "discordRpc.js"],
+  "win": {
+    "target": "nsis",
+    "icon": "assets/icon.ico"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "icon": "assets/icon.png",
+    "category": "Music"
+  }
+}
 ```
 
-> Los nombres exactos de estos scripts dependen de lo que tengas definido en `yfitopspc/package.json`; ajusta los comandos según corresponda.
+> Necesitas un icono `.png` (512x512 recomendado) además del `.ico`; Linux no usa `.ico`.
+
+### Compilar el `.exe` (Windows)
+
+```bash
+cd yfitopspc
+npm run build                     # compila el renderer (React) a dist/
+npx electron-builder --win        # genera el instalador en release/
+```
+
+### Compilar para Linux, paso a paso
+
+`electron-builder` puede intentar generar el paquete de Linux desde Windows, pero en la práctica falla bastante (dependencias nativas como `fpm`, permisos de symlink, etc.). Lo fiable es compilar **desde una máquina Linux** (nativa, VM o WSL2), apuntando a la misma carpeta `yfitopspc/` del proyecto (por ejemplo, vía un recurso compartido de red, `git clone`, o copiando la carpeta):
+
+1. **Entra a una máquina/VM/WSL2 con Linux** y sitúate en la carpeta del proyecto:
+   ```bash
+   cd yfitopspc
+   ```
+
+2. **Instala Node.js 18+** si no lo tienes (ejemplo con `nvm`):
+   ```bash
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+   nvm install 18
+   ```
+
+3. **Instala las dependencias nativas que pide `electron-builder` para empaquetar Linux** (Debian/Ubuntu):
+   ```bash
+   sudo apt update
+   sudo apt install -y build-essential fakeroot rpm
+   ```
+   (`fakeroot` hace falta para el target `deb`; `rpm` solo si además vas a generar target `.rpm`.)
+
+4. **Instala las dependencias del proyecto** (igual que en Windows, pero aquí se compilan los módulos nativos para Linux):
+   ```bash
+   npm install
+   ```
+
+5. **Compila el renderer** (React → `dist/`):
+   ```bash
+   npm run build
+   ```
+
+6. **Genera el paquete de Linux**:
+   ```bash
+   npx electron-builder --linux AppImage deb
+   ```
+   Esto deja los ficheros generados en `release/`, por ejemplo:
+   ```text
+   release/
+   ├── YFitops-2.0.0.AppImage
+   └── yfitops_2.0.0_amd64.deb
+   ```
+
+7. **(Opcional) Compilar también el `.exe` desde la misma máquina Linux** con Wine, si quieres tener ambos binarios en un solo paso:
+   ```bash
+   sudo apt install -y wine
+   npx electron-builder --win --linux
+   ```
+
+> Si usas GitHub Actions o similar, lo más cómodo es tener un job con runner `ubuntu-latest` que compile el target Linux y otro con `windows-latest` que compile el `.exe`, ambos apuntando al mismo `yfitopspc/`.
+
+### Instalar el binario en Linux
+
+**AppImage** (no necesita instalación, es un ejecutable portable):
+```bash
+chmod +x YFitops-2.0.0.AppImage
+./YFitops-2.0.0.AppImage
+```
+Si quieres que aparezca en el menú de aplicaciones con icono, usa una herramienta como [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) (lo integra automáticamente al primer doble clic).
+
+**Paquete .deb** (Debian, Ubuntu y derivados):
+```bash
+sudo dpkg -i yfitops_2.0.0_amd64.deb
+# Si faltan dependencias:
+sudo apt install -f
+```
+Una vez instalado, la app queda disponible en el menú de aplicaciones como cualquier otro programa, y se puede desinstalar con:
+```bash
+sudo apt remove yfitops
+```
+
+### Cosas a revisar al pasar la app a Linux
+
+- **Ventana sin marco (`frame: false`)**: funciona en Linux, pero el arrastre de la ventana puede comportarse algo distinto según el gestor de ventanas (GNOME/KDE, X11/Wayland) — conviene probarlo visualmente.
+- **Discord Rich Presence**: `@xhayper/discord-rpc` gestiona el socket IPC de Linux (`~/.config/discord-ipc-0`) automáticamente, no requiere cambios en `discordRpc.js`.
+- **Sesión persistida** (`app.getPath('userData')` en `main.js`): es multiplataforma, en Linux guarda el `session.json` normalmente en `~/.config/YFitops/`.
+- **Permisos de audio**: el `setPermissionRequestHandler` de `main.js` ya autoriza `media`, no hace falta tocar nada para reproducir audio en Linux.
 
 ### Piezas clave
 
@@ -396,7 +497,7 @@ npm run dist        # empaqueta el ejecutable/instalador en release/
 | `src/store/MusicStore.js` | Estado global de la app (zustand): sesión, reproductor de audio, cola de reproducción, favoritos, heartbeat cada 30s y sincronización con Discord RPC. |
 | `src/components/` | Vistas y componentes de la interfaz: login, sidebar, biblioteca, favoritos, colecciones, barra y modal del reproductor. |
 
-### Notas de la app de PC
+### Notas de la app de escritorio
 
 - La sesión se guarda cifrada... bueno, en texto plano en `session.json` dentro de la carpeta `userData` de Electron; al abrir la app se valida el token contra `/pc/verify` y si no es válido se limpia sola.
 - El changelog que se ve al actualizar sale de `/pc/changelog`, que a su vez lee `data/actualizacion.json` → campo `pc` en el servidor.
