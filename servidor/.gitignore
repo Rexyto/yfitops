@@ -1,0 +1,9 @@
+package-lock.json
+*.env
+node_modules/
+playlist/**
+!playlist/.gitkeep
+portadas/**
+!portadas/.gitkeep
+data/**
+!data/.gitkeep

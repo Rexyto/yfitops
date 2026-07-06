@@ -1,0 +1,266 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  color: #e0e0e0;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.header h1 {
+  font-size: 2rem;
+  margin: 0;
+  background: linear-gradient(135deg, #fff, #1ed760);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.lastUpdate {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: #1ed760;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.metricCard {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 1rem;
+  padding: 1.2rem;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.metricCard:hover {
+  border-color: #1ed760;
+  transform: translateY(-2px);
+}
+
+.metricValue {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1ed760;
+  line-height: 1;
+}
+
+.metricLabel {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #666;
+  margin-top: 0.5rem;
+}
+
+.metricSub {
+  font-size: 0.7rem;
+  color: #444;
+  margin-top: 0.25rem;
+}
+
+.statusPanel {
+  background: #0a0a0a;
+  border-radius: 1rem;
+  padding: 1.2rem;
+  margin-bottom: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.statusIndicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
+.statusMetrics {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.latencyBadge {
+  padding: 0.4rem 1rem;
+  border-radius: 2rem;
+  font-size: 0.8rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.latencyBadge[data-status="excelente"] {
+  background: #1ed76020;
+  color: #1ed760;
+  border: 1px solid #1ed76040;
+}
+
+.latencyBadge[data-status="normal"] {
+  background: #f59e0b20;
+  color: #f59e0b;
+  border: 1px solid #f59e0b40;
+}
+
+.latencyBadge[data-status="alta"] {
+  background: #ef444420;
+  color: #ef4444;
+  border: 1px solid #ef444440;
+}
+
+.section {
+  background: #0e0e0e;
+  border-radius: 1rem;
+  padding: 1.2rem;
+  margin-bottom: 1.5rem;
+}
+
+.section h2 {
+  font-size: 1.2rem;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.chartContainer {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  min-width: 500px;
+}
+
+.barWrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.bar {
+  width: 100%;
+  background: linear-gradient(to top, #1ed760, #1ed76080);
+  border-radius: 4px 4px 0 0;
+  min-height: 3px;
+  transition: height 0.3s;
+}
+
+.barLabel {
+  font-size: 0.7rem;
+  color: #666;
+}
+
+.timeline {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 80px;
+}
+
+.timelineBar {
+  flex: 1;
+  background: #1ed760;
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  transition: background 0.2s;
+}
+
+.timelineGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.topSongs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.songRow {
+  display: grid;
+  grid-template-columns: 30px 1fr 60px;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.rank {
+  color: #666;
+  font-weight: bold;
+}
+
+.songInfo {
+  overflow: hidden;
+}
+
+.songTitle {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.songArtist {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.plays {
+  color: #1ed760;
+  font-weight: bold;
+  text-align: right;
+}
+
+.loading, .error {
+  text-align: center;
+  padding: 3rem;
+  font-size: 1.2rem;
+}
+
+.error {
+  color: #ef4444;
+}
+
+@media (max-width: 768px) {
+  .container { padding: 1rem; }
+  .timelineGrid { grid-template-columns: 1fr; }
+  .songRow { grid-template-columns: 25px 1fr 50px; gap: 0.5rem; }
+}
