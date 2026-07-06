@@ -675,10 +675,12 @@ El servidor registra automáticamente por usuario:
 | `npm start` | Inicia el servidor en modo producción |
 | `npm run dev` | Desarrollo con nodemon (reinicio automático) |
 | `npm run validate` | Valida la configuración del entorno |
-| `npm run migrate` | Migra datos JSON heredados a MySQL |
 | `npm run web:install` | Instala dependencias del panel web |
 | `npm run web:dev` | Panel web en modo desarrollo con hot-reload |
 | `npm run web:build` | Build del panel web para producción |
+| `npm run dist:linux` | Build de los archivos de instalación para linux |
+| `npm run dist:all` | Build tanto de los archivos linux como windows |
+| `npm run dist`  | Build para crear el .exe |
 
 ---
 
