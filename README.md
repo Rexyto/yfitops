@@ -15,6 +15,7 @@
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Carpeta data/](#carpeta-data)
 - [App de escritorio (Windows y Linux)](#app-de-escritorio-windows-y-linux)
+- [Canciones, portadas y playlists](#canciones-portadas-y-playlists)
 - [APIs](#apis)
 - [Seguridad](#seguridad)
 - [Sincronización de carpetas](#sincronización-de-carpetas)
@@ -92,7 +93,7 @@ BOT_API_KEY=tu_clave_bot_18K2v6GlanhBaY2YVC7TMe9w50l11tYtLjHQ35
 
 El servidor **no crea las tablas por ti** (salvo `bot_api_keys`, que se auto-crea al arrancar si no existe). Antes de arrancar por primera vez, crea la base de datos indicada en `MYSQL_DATABASE` y ejecuta este script para dejar el esquema listo:
 
-> ⚠️ Este es el esquema recomendado a partir de los datos que maneja el servidor (usuarios, canciones, favoritos, playlists y estadísticas). Si tu `lib/storage.js` usa nombres de columna distintos, ajusta el script en consecuencia.
+> Este es el esquema recomendado a partir de los datos que maneja el servidor (usuarios, canciones, favoritos, playlists y estadísticas). Si tu `lib/storage.js` usa nombres de columna distintos, ajusta el script en consecuencia.
 
 ```sql
 -- Usuarios
@@ -267,7 +268,7 @@ Esta es la ruta real del repositorio, tal cual queda en disco:
 yfitops/
 ├── API_DOCUMENTATION.md        # Documentación detallada de todos los endpoints (ver sección APIs)
 ├── README.md
-├── app/                        # App móvil (Android) —  Próximamente.
+├── app/                        # App móvil (Android) — Próximamente
 ├── servidor/                   # Backend (Node.js + Express + MySQL)
 │   ├── server.js               # Punto de entrada del backend
 │   ├── package.json
@@ -356,8 +357,6 @@ Esta carpeta se crea sola al arrancar el servidor (`fs.mkdir(DATA_DIR, { recursi
 ---
 
 ## App de escritorio (Windows y Linux)
-
->  El código de la app móvil (Android) no se sube por ahora. La app de escritorio sí, y **es la misma para Windows y Linux** — no hace falta duplicar carpetas ni código.
 
 La app de escritorio (`yfitopspc/`) es una aplicación **Electron + React** que vive justo al lado de `servidor/`, dentro de la misma ruta del proyecto. Se conecta al backend a través de las rutas `/pc/*` documentadas en [APIs](#apis).
 
@@ -545,6 +544,114 @@ Para forzar una sincronización manual desde el cliente:
 
 ```http
 POST /api/sync
+```
+
+---
+
+## Canciones, portadas y playlists
+
+### Subir canciones a la biblioteca
+
+Dos formas de meter canciones nuevas:
+
+**1. Desde la app (móvil o PC), subida directa:**
+```http
+POST /api/upload
+Content-Type: multipart/form-data
+campo: audio  (archivo de audio)
+```
+El servidor genera un `id` único, procesa el archivo (`processAudioFile`) para sacar la duración y otros metadatos básicos, lo añade a la biblioteca y lo asocia como "subida" del usuario que hizo la petición (`user.songs`).
+
+**2. Copiando el archivo directamente en el servidor:**
+Pega el archivo de audio dentro de:
+```text
+servidor/canciones/
+```
+El watcher en tiempo real lo detecta solo, o si prefieres forzarlo:
+```http
+POST /api/sync
+```
+Esto compara los archivos físicos de `canciones/` contra la base de datos: añade los que falten y quita de la base los que ya no existan en disco.
+
+> Los formatos de audio aceptados dependen de `AUDIO_EXTS` en `lib/config.js` (normalmente `.mp3`, `.wav`, `.flac`...).
+
+### Editar título, artista y álbum de una canción
+
+```http
+PUT /api/songs/:id
+Content-Type: application/json
+
+{ "title": "Nuevo título", "artist": "Nuevo artista", "album": "Nuevo álbum" }
+```
+Cualquier campo que no envíes se queda tal cual estaba. En la app de PC esto se hace pulsando el icono ✎ sobre cualquier canción de "Mi Biblioteca".
+
+### Subir o cambiar la portada de una canción
+
+Hay dos formas, según si es una canción suelta o un lote entero:
+
+**A) Portada individual, subida manual (una canción a la vez):**
+```http
+POST /api/songs/:id/cover
+Content-Type: multipart/form-data
+campo: cover  (imagen)
+```
+El servidor la guarda como `canciones/{id}.jpg` (o la extensión que subas) y actualiza el `coverUrl` de esa canción. En la app de PC se hace desde el modal de edición de canción (📷) o desde la pantalla grande del reproductor.
+
+**B) Carátulas en lote, dejándolas en `servidor/portadas/`:**
+
+>  Esto es **100% manual**: el servidor no descarga ni genera ninguna carátula por su cuenta. Tienes que conseguir tú la imagen (descargarla, recortarla, etc.) y subirla tú mismo a `servidor/portadas/` con el nombre correcto — el servidor solo se encarga de **emparejarla** con la canción que ya tienes, no de buscarla ni crearla.
+
+Si tienes muchas carátulas ya descargadas (por ejemplo, junto a las canciones al bajarlas de YouTube), puedes meterlas todas en:
+```text
+servidor/portadas/
+```
+y el servidor las empareja automáticamente con la canción correspondiente **por nombre de archivo**.
+
+>  **Clave para que funcione:** el nombre del archivo de la portada debe coincidir con el nombre del archivo de audio (mismo nombre base, cambiando solo la extensión). Ejemplo:
+> ```text
+> canciones/ejemplo.mp3
+> portadas/ejemplo.webp
+> ```
+
+
+Después de colocar las imágenes, llama a:
+```http
+POST /api/refresh-covers
+```
+(o `POST /pc/refresh-covers` desde la app de PC) para que relacione las carátulas nuevas con canciones que **ya existían** en la biblioteca. Las canciones que subas o sincronices **a partir de ahora** recogen su carátula sola si el nombre coincide, sin necesidad de este paso extra.
+
+### Crear playlists
+
+Hay dos tipos, y se crean de formas totalmente distintas:
+
+**1. Playlists manuales** (privadas, ligadas a un usuario, se gestionan desde la app):
+```http
+POST /api/playlists
+Content-Type: application/json
+
+{ "name": "Mi playlist", "songs": ["id1", "id2"], "coverColor": "#1DB954" }
+```
+Se pueden editar (`PUT /api/playlists/:id`) o borrar (`DELETE /api/playlists/:id`) después, y solo las ve el usuario que las creó.
+
+**2. Playlists automáticas por carpetas** (públicas para todos, no se crean por API):
+
+>  Esto también es **100% manual**: no hay ningún botón ni endpoint que cree la carpeta, suba las canciones o ponga la portada por ti. Tienes que hacer tú, a mano, en el sistema de archivos del servidor: **1)** crear la carpeta, **2)** meter dentro los archivos de audio, y **3)** si quieres portada, subir tú la imagen con el nombre exacto. El servidor solo detecta lo que ya has puesto ahí y lo convierte en playlist.
+
+Se crean **poniendo una carpeta** dentro de `servidor/playlist/`. El nombre de la carpeta pasa a ser el nombre de la playlist, y cualquier archivo de audio que metas dentro forma parte de ella automáticamente:
+
+```text
+servidor/playlist/
+└── Mis Favoritas de Verano/       ← se convierte en la playlist "Mis Favoritas de Verano"
+    ├── cancion1.mp3
+    ├── cancion2.mp3
+    └── cancion3.mp3
+```
+
+> Si la Carpeta (Playlist) se llama, NUEVAYOL/, la portada ha de ser NUEVAYOL.png y estar dentro de la carpeta NUEVAYOL/ en este caso solo se admite **formato png**
+
+El watcher en tiempo real la detecta sola, o puedes forzar la sincronización con:
+```http
+POST /api/folderplaylists/sync
 ```
 
 ---
