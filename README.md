@@ -22,7 +22,6 @@
 - [Estadísticas](#estadísticas)
 - [Scripts disponibles](#scripts-disponibles)
 - [Solución de problemas](#solución-de-problemas)
-- [Versiones](#versiones)
 
 ---
 
