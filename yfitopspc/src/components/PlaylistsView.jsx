@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import useMusicStore from '../store/MusicStore';
+import useSettingsStore from '../store/SettingsStore';
+import { useT } from '../i18n';
 import { SERVER_URL } from '../api';
 
 function shuffle(arr) {
@@ -26,7 +28,8 @@ const fmtTotal = (secs) => {
 const COLORS = ['#1DB954','#E91E63','#9C27B0','#2196F3','#FF5722','#FF9800','#009688','#607D8B'];
 
 // ── Tarjeta de playlist ─────────────────────────────────────
-function PlaylistCard({ playlist, type, onClick }) {
+function PlaylistCard({ playlist, type, onClick, isDownloaded }) {
+  const t = useT();
   const color = playlist.coverColor || '#1DB954';
   const cover = playlist.coverUrl ? `${SERVER_URL}${playlist.coverUrl}` : null;
   const count = playlist.songs?.length ?? 0;
@@ -38,13 +41,16 @@ function PlaylistCard({ playlist, type, onClick }) {
           ? <img src={cover} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
           : <span style={{ fontSize: 36, color }}>🎶</span>
         }
+        {isDownloaded && (
+          <span style={styles.cardDownloadBadge} title={t('playlists.downloadedForOffline')}>⬇</span>
+        )}
       </div>
       <div style={styles.cardInfo}>
         <span style={styles.cardName}>{playlist.name}</span>
         <span style={styles.cardMeta}>
           {type === 'folder'
-            ? `${count} canciones · ${fmtTotal(playlist.totalDuration)}`
-            : `${count} canciones`
+            ? t('playlists.songCountAndDuration', count, fmtTotal(playlist.totalDuration))
+            : t('playlists.songCount', count)
           }
         </span>
       </div>
@@ -54,8 +60,10 @@ function PlaylistCard({ playlist, type, onClick }) {
 }
 
 // ── Vista detalle de playlist ────────────────────────────────
-function PlaylistDetail({ playlist, songs, onBack }) {
+function PlaylistDetail({ playlist, songs, isDownloaded, onBack }) {
   const { playSong, playShuffle, toggleFavorite, favorites, addToQueue, addManyToQueue } = useMusicStore();
+  const { downloadedSongIds } = useSettingsStore();
+  const t = useT();
   const [search, setSearch] = useState('');
   const [searchVisible, setSearchVisible] = useState(false);
   const [queuedId, setQueuedId] = useState(null);
@@ -84,13 +92,17 @@ function PlaylistDetail({ playlist, songs, onBack }) {
       <div style={styles.hero}>
         {cover
           ? <img src={cover} style={styles.heroCover} alt="" />
-          : <div style={{ ...styles.heroCover, background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 80 }}>🎶</div>
+          : <div style={{ ...styles.heroCover, background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 80 }}>🎶</div>
         }
         <div style={styles.heroOverlay}>
-          <button style={styles.backBtn} onClick={onBack}>← Volver</button>
+          <button style={styles.backBtn} onClick={onBack}>{t('playlists.back')}</button>
           <div style={styles.heroInfo}>
             <h2 style={styles.heroTitle}>{playlist.name}</h2>
-            <span style={styles.heroMeta}>{filtered.length} canciones{playlist.totalDuration ? ` · ${fmtTotal(playlist.totalDuration)}` : ''}</span>
+            <span style={styles.heroMeta}>
+              {t('playlists.songCount', filtered.length)}
+              {playlist.totalDuration ? ` · ${fmtTotal(playlist.totalDuration)}` : ''}
+              {isDownloaded ? ` · ⬇ ${t('playlists.downloaded')}` : ''}
+            </span>
           </div>
         </div>
       </div>
@@ -98,22 +110,21 @@ function PlaylistDetail({ playlist, songs, onBack }) {
       {/* Acciones */}
       <div style={styles.actionRow}>
         <button style={{ ...styles.shuffleBtn, borderColor: color + '66', color }} onClick={() => playShuffle(allSongs)}>
-          🔀 Aleatorio
+          {t('playlists.shuffle')}
         </button>
         <button style={{ ...styles.playAllBtn, background: color }} onClick={() => allSongs.length > 0 && playSong(allSongs[0], allSongs)}>
-          ▶ Play
+          {t('playlists.play')}
         </button>
         <button
           style={styles.queueAllBtn}
           onClick={() => addManyToQueue(allSongs)}
-          title="Agregar toda la lista a la cola"
         >
-          + Cola
+          {t('playlists.addQueue')}
         </button>
         <button
           style={{ ...styles.searchToggleBtn, background: searchVisible ? color + '22' : 'transparent', borderColor: color + '44' }}
           onClick={() => { setSearchVisible(v => !v); setSearch(''); }}
-          title="Buscar"
+          title={t('playlists.search')}
         >
           🔍
         </button>
@@ -125,7 +136,7 @@ function PlaylistDetail({ playlist, songs, onBack }) {
           <span style={{ fontSize: 14, marginRight: 10 }}>🔍</span>
           <input
             style={styles.searchInput}
-            placeholder="Buscar en esta lista..."
+            placeholder={t('playlists.searchPlaceholder')}
             value={search}
             onChange={e => setSearch(e.target.value)}
             autoFocus
@@ -140,6 +151,7 @@ function PlaylistDetail({ playlist, songs, onBack }) {
           const { currentSong } = useMusicStore.getState();
           const isActive = currentSong?.id === song.id;
           const isFav = favorites.includes(song.id);
+          const songDownloaded = downloadedSongIds.includes(String(song.id));
           const songCover = song.coverUrl ? `${SERVER_URL}${song.coverUrl}` : null;
           const justQueued = queuedId === song.id;
 
@@ -157,15 +169,18 @@ function PlaylistDetail({ playlist, songs, onBack }) {
                 : <div style={styles.songCoverEmpty}>♪</div>
               }
               <div style={styles.songMeta}>
-                <span style={{ ...styles.songTitle, ...(isActive ? { color } : {}) }}>{song.title}</span>
+                <span style={styles.titleRow}>
+                  <span style={{ ...styles.songTitle, ...(isActive ? { color } : {}) }}>{song.title}</span>
+                  {songDownloaded && <span style={styles.downloadedDot} title={t('songs.downloadedTooltip')}>⬇</span>}
+                </span>
                 <span style={styles.songArtist}>{song.artist} · {fmt(song.duration)}</span>
               </div>
               <button
                 style={styles.favBtn}
                 onClick={e => handleAddToQueue(song, e)}
-                title="Agregar a la cola"
+                title={t('playlists.addQueue')}
               >
-                <span style={{ color: justQueued ? '#1ed760' : '#555', fontSize: 16 }}>
+                <span style={{ color: justQueued ? '#1ed760' : 'var(--text-dim)', fontSize: 16 }}>
                   {justQueued ? '✓' : '+'}
                 </span>
               </button>
@@ -173,7 +188,7 @@ function PlaylistDetail({ playlist, songs, onBack }) {
                 style={styles.favBtn}
                 onClick={e => { e.stopPropagation(); toggleFavorite(song.id); }}
               >
-                <span style={{ color: isFav ? '#1ed760' : '#555', fontSize: 16 }}>{isFav ? '♥' : '♡'}</span>
+                <span style={{ color: isFav ? '#1ed760' : 'var(--text-dim)', fontSize: 16 }}>{isFav ? '♥' : '♡'}</span>
               </button>
             </div>
           );
@@ -182,11 +197,11 @@ function PlaylistDetail({ playlist, songs, onBack }) {
         {filtered.length === 0 && (
           <div style={styles.empty}>
             <span style={{ fontSize: 40 }}>{search ? '🔍' : '📭'}</span>
-            <p style={{ color: '#fff', fontWeight: 700, margin: '10px 0 4px' }}>
-              {search ? 'Sin resultados' : 'Lista vacía'}
+            <p style={{ color: 'var(--text)', fontWeight: 700, margin: '10px 0 4px' }}>
+              {search ? t('playlists.noResults') : t('playlists.emptyList')}
             </p>
-            <p style={{ color: '#555', fontSize: 14 }}>
-              {search ? `No hay canciones con "${search}"` : 'Esta lista no tiene canciones'}
+            <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>
+              {search ? t('playlists.noResultsHint', search) : t('playlists.emptyListHint')}
             </p>
           </div>
         )}
@@ -198,6 +213,8 @@ function PlaylistDetail({ playlist, songs, onBack }) {
 // ── Componente principal ─────────────────────────────────────
 export default function PlaylistsView() {
   const { playlists, folderPlaylists, songs } = useMusicStore();
+  const { isPlaylistDownloaded } = useSettingsStore();
+  const t = useT();
   const [detail, setDetail] = useState(null); // { type, playlist }
 
   if (detail) {
@@ -209,6 +226,7 @@ export default function PlaylistsView() {
       <PlaylistDetail
         playlist={detail.playlist}
         songs={resolvedSongs}
+        isDownloaded={isPlaylistDownloaded(detail.playlist.id)}
         onBack={() => setDetail(null)}
       />
     );
@@ -217,19 +235,20 @@ export default function PlaylistsView() {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h1 style={styles.title}>Colecciones</h1>
-        <span style={styles.sub}>{playlists.length + folderPlaylists.length} listas</span>
+        <h1 style={styles.title}>{t('playlists.title')}</h1>
+        <span style={styles.sub}>{t('playlists.count', playlists.length + folderPlaylists.length)}</span>
       </div>
 
       {folderPlaylists.length > 0 && (
         <section style={styles.section}>
-          <h3 style={styles.sectionTitle}>Desde carpetas</h3>
+          <h3 style={styles.sectionTitle}>{t('playlists.fromFolders')}</h3>
           <div style={styles.grid}>
             {folderPlaylists.map(pl => (
               <PlaylistCard
                 key={pl.id}
                 playlist={pl}
                 type="folder"
+                isDownloaded={isPlaylistDownloaded(pl.id)}
                 onClick={() => setDetail({ type: 'folder', playlist: pl })}
               />
             ))}
@@ -239,13 +258,14 @@ export default function PlaylistsView() {
 
       {playlists.length > 0 && (
         <section style={styles.section}>
-          <h3 style={styles.sectionTitle}>Mis colecciones</h3>
+          <h3 style={styles.sectionTitle}>{t('playlists.mine')}</h3>
           <div style={styles.grid}>
             {playlists.map(pl => (
               <PlaylistCard
                 key={pl.id}
                 playlist={pl}
                 type="manual"
+                isDownloaded={isPlaylistDownloaded(pl.id)}
                 onClick={() => setDetail({ type: 'manual', playlist: pl })}
               />
             ))}
@@ -256,8 +276,8 @@ export default function PlaylistsView() {
       {playlists.length === 0 && folderPlaylists.length === 0 && (
         <div style={styles.empty}>
           <span style={{ fontSize: 56 }}>🎶</span>
-          <p style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: '16px 0 8px' }}>Sin colecciones</p>
-          <p style={{ color: '#555', fontSize: 14 }}>Las colecciones se crean desde la app móvil</p>
+          <p style={{ color: 'var(--text)', fontSize: 20, fontWeight: 700, margin: '16px 0 8px' }}>{t('playlists.emptyOverall')}</p>
+          <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>{t('playlists.emptyOverallHint')}</p>
         </div>
       )}
     </div>
@@ -267,22 +287,29 @@ export default function PlaylistsView() {
 const styles = {
   container: { padding: '0 0 40px 0' },
   header: { padding: '28px 28px 8px' },
-  title: { fontSize: 28, fontWeight: 800, color: '#fff', letterSpacing: -0.5, margin: '0 0 4px' },
-  sub: { fontSize: 12, color: '#555', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
+  title: { fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5, margin: '0 0 4px' },
+  sub: { fontSize: 12, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
   section: { padding: '0 24px', marginBottom: 8 },
-  sectionTitle: { color: '#555', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, margin: '20px 0 12px' },
+  sectionTitle: { color: 'var(--text-dim)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, margin: '20px 0 12px' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 },
 
   card: {
-    background: '#1a1a1a', borderRadius: 14,
+    background: 'var(--bg3)', borderRadius: 14,
     overflow: 'hidden', cursor: 'pointer',
-    border: '1px solid #252525', transition: 'transform 0.15s, background 0.15s',
+    border: '1px solid var(--border-strong)', transition: 'transform 0.15s, background 0.15s',
     position: 'relative',
   },
-  cardCover: { height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  cardCover: { height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' },
+  cardDownloadBadge: {
+    position: 'absolute', top: 8, right: 8,
+    background: 'rgba(0,0,0,0.65)', color: '#1ed760',
+    width: 24, height: 24, borderRadius: '50%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 12, lineHeight: 1,
+  },
   cardInfo: { padding: '12px 14px' },
-  cardName: { display: 'block', color: '#fff', fontSize: 14, fontWeight: 700, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  cardMeta: { color: '#888', fontSize: 12 },
+  cardName: { display: 'block', color: 'var(--text)', fontSize: 14, fontWeight: 700, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  cardMeta: { color: 'var(--text-muted)', fontSize: 12 },
   cardAccent: { height: 3 },
 
   // Detail
@@ -301,8 +328,8 @@ const styles = {
     color: '#1ed760', fontSize: 14, fontWeight: 700, cursor: 'pointer',
   },
   heroInfo: {},
-  heroTitle: { color: '#fff', fontSize: 24, fontWeight: 800, margin: '0 0 4px', letterSpacing: -0.5 },
-  heroMeta: { color: '#aaa', fontSize: 13 },
+  heroTitle: { color: '#ffffff', fontSize: 24, fontWeight: 800, margin: '0 0 4px', letterSpacing: -0.5, textShadow: '0 1px 4px rgba(0,0,0,0.4)' },
+  heroMeta: { color: 'rgba(255,255,255,0.75)', fontSize: 13 },
 
   actionRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px 6px', flexWrap: 'wrap' },
   shuffleBtn: {
@@ -314,25 +341,25 @@ const styles = {
     color: '#000', fontSize: 13, fontWeight: 800, cursor: 'pointer',
   },
   queueAllBtn: {
-    background: 'none', border: '1px solid #333', borderRadius: 20,
-    padding: '8px 16px', color: '#aaa', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+    background: 'none', border: '1px solid var(--border-strong)', borderRadius: 20,
+    padding: '8px 16px', color: 'var(--text-muted)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
   },
   searchToggleBtn: {
     border: '1px solid', borderRadius: 20, padding: '8px 12px',
-    fontSize: 14, cursor: 'pointer', color: '#fff',
+    fontSize: 14, cursor: 'pointer', color: 'var(--text)',
   },
 
   searchBox: {
     display: 'flex', alignItems: 'center',
-    background: '#1e1e1e', borderRadius: 10,
+    background: 'var(--bg4)', borderRadius: 10,
     margin: '4px 20px', padding: '0 14px',
-    border: '1px solid #2a2a2a',
+    border: '1px solid var(--border-strong)',
   },
   searchInput: {
     flex: 1, background: 'none', border: 'none', outline: 'none',
-    color: '#fff', fontSize: 15, padding: '12px 0',
+    color: 'var(--text)', fontSize: 15, padding: '12px 0',
   },
-  clearBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#555', fontSize: 14 },
+  clearBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 14 },
 
   songList: { paddingBottom: 40 },
   songRow: {
@@ -340,17 +367,19 @@ const styles = {
     padding: '9px 20px', margin: '1px 8px',
     borderRadius: 8, cursor: 'pointer', transition: 'background 0.1s',
   },
-  songRowActive: { background: '#1a1a1a' },
-  idx: { width: 28, color: '#555', fontSize: 13, textAlign: 'center', fontWeight: 600, flexShrink: 0 },
+  songRowActive: { background: 'var(--bg3)' },
+  idx: { width: 28, color: 'var(--text-dim)', fontSize: 13, textAlign: 'center', fontWeight: 600, flexShrink: 0 },
   songCover: { width: 44, height: 44, borderRadius: 6, marginRight: 12, objectFit: 'cover', flexShrink: 0 },
   songCoverEmpty: {
     width: 44, height: 44, borderRadius: 6, marginRight: 12,
-    background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 18, color: '#333', flexShrink: 0,
+    background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 18, color: 'var(--text-faint)', flexShrink: 0,
   },
   songMeta: { flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 },
-  songTitle: { color: '#e0e0e0', fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  songArtist: { color: '#666', fontSize: 12 },
+  titleRow: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 },
+  songTitle: { color: 'var(--text-secondary)', fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  songArtist: { color: 'var(--text-dim)', fontSize: 12 },
+  downloadedDot: { color: '#1ed760', fontSize: 11, flexShrink: 0 },
   favBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: '6px 8px' },
 
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 80 },

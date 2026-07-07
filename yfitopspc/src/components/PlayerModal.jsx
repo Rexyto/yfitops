@@ -2,6 +2,7 @@
 import React, { useRef } from 'react';
 import useMusicStore from '../store/MusicStore';
 import { SERVER_URL } from '../api';
+import { useT } from '../i18n';
 
 const fmt = (ms) => {
   if (!ms || ms <= 0) return '0:00';
@@ -18,6 +19,7 @@ export default function PlayerModal({ onClose }) {
   } = useMusicStore();
 
   const fileRef = useRef();
+  const t = useT();
 
   if (!currentSong) return null;
 
@@ -43,7 +45,7 @@ export default function PlayerModal({ onClose }) {
         {/* Header */}
         <div style={styles.header}>
           <button style={styles.closeBtn} onClick={onClose}>⌄</button>
-          <span style={styles.headerLabel}>REPRODUCIENDO</span>
+          <span style={styles.headerLabel}>{t('player.nowPlaying')}</span>
           <div style={{ width: 40 }} />
         </div>
 
@@ -51,7 +53,7 @@ export default function PlayerModal({ onClose }) {
         <div style={styles.coverWrap}>
           {cover
             ? <img src={cover} style={styles.cover} alt="" />
-            : <div style={styles.coverEmpty}><span style={{ fontSize: 80, color: '#2a2a2a' }}>♫</span></div>
+            : <div style={styles.coverEmpty}><span style={{ fontSize: 80, color: 'var(--border-strong)' }}>♫</span></div>
           }
           <button style={styles.editCoverBtn} onClick={() => fileRef.current?.click()}>📷</button>
           <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCoverChange} />
@@ -64,7 +66,7 @@ export default function PlayerModal({ onClose }) {
             <p style={styles.songArtist}>{currentSong.artist}</p>
           </div>
           <button style={styles.favBtn} onClick={() => toggleFavorite(currentSong.id)}>
-            <span style={{ color: isFav ? '#1ed760' : '#444', fontSize: 26 }}>
+            <span style={{ color: isFav ? '#1ed760' : 'var(--text-faint)', fontSize: 26 }}>
               {isFav ? '♥' : '♡'}
             </span>
           </button>
@@ -88,9 +90,9 @@ export default function PlayerModal({ onClose }) {
           <button
             style={{ ...styles.sideBtn, ...(isLooping ? styles.sideBtnActive : {}) }}
             onClick={toggleLoop}
-            title="Repetir"
+            title={t('player.repeat')}
           >
-            <span style={{ fontSize: 18, color: isLooping ? '#000' : '#555' }}>🔁</span>
+            <span style={{ fontSize: 18, color: isLooping ? '#000' : 'var(--text-dim)' }}>🔁</span>
           </button>
 
           <button style={styles.skipBtn} onClick={playPrevious}>⏮</button>
@@ -116,23 +118,23 @@ const styles = {
     zIndex: 500,
   },
   modal: {
-    background: '#0a0a0a', borderRadius: 20,
+    background: 'var(--bg0)', borderRadius: 20,
     width: 420, maxWidth: '95vw',
     padding: '20px 28px 32px',
-    border: '1px solid #1a1a1a',
+    border: '1px solid var(--border)',
     display: 'flex', flexDirection: 'column', gap: 0,
   },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   closeBtn: {
     width: 36, height: 36, borderRadius: '50%',
-    background: '#1a1a1a', border: 'none', cursor: 'pointer',
-    color: '#fff', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'var(--bg3)', border: 'none', cursor: 'pointer',
+    color: 'var(--text)', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
-  headerLabel: { color: '#444', fontSize: 11, fontWeight: 700, letterSpacing: 1.5 },
+  headerLabel: { color: 'var(--text-faint)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5 },
 
   coverWrap: {
     borderRadius: 16, overflow: 'hidden',
-    aspectRatio: '1', background: '#141414',
+    aspectRatio: '1', background: 'var(--bg2)',
     position: 'relative', marginBottom: 24,
     boxShadow: '0 8px 40px rgba(30,215,96,0.1)',
   },
@@ -150,22 +152,22 @@ const styles = {
   },
 
   infoRow: { display: 'flex', alignItems: 'center', marginBottom: 16 },
-  songTitle: { fontSize: 22, fontWeight: 800, color: '#fff', margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  songArtist: { fontSize: 15, color: '#666', margin: 0 },
+  songTitle: { fontSize: 22, fontWeight: 800, color: 'var(--text)', margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  songArtist: { fontSize: 15, color: 'var(--text-dim)', margin: 0 },
   favBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 8, flexShrink: 0 },
 
   seekWrap: { marginBottom: 24 },
   seekTrack: {
-    height: 4, background: '#2a2a2a', borderRadius: 2,
+    height: 4, background: 'var(--bg4)', borderRadius: 2,
     position: 'relative', cursor: 'pointer', marginBottom: 8,
   },
   seekFill: { height: '100%', background: '#1ed760', borderRadius: 2 },
   seekThumb: {
     position: 'absolute', top: '50%', transform: 'translate(-50%, -50%)',
-    width: 12, height: 12, borderRadius: '50%', background: '#fff',
+    width: 12, height: 12, borderRadius: '50%', background: 'var(--text)',
   },
   timeRow: { display: 'flex', justifyContent: 'space-between' },
-  time: { fontSize: 12, color: '#444', fontWeight: 500 },
+  time: { fontSize: 12, color: 'var(--text-faint)', fontWeight: 500 },
 
   controls: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
   sideBtn: {
@@ -176,7 +178,7 @@ const styles = {
   sideBtnActive: { background: '#1ed760' },
   skipBtn: {
     background: 'none', border: 'none', cursor: 'pointer',
-    color: '#ccc', fontSize: 26, width: 50, height: 50,
+    color: 'var(--text-secondary)', fontSize: 26, width: 50, height: 50,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
   playBtn: {

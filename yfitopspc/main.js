@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { setNowPlaying, clearPresence } = require('./discordRpc');
+const localData = require('./localData');
+const autostart = require('./autostart');
 
 const isDev = !app.isPackaged;
 
@@ -60,6 +62,7 @@ app.whenReady().then(() => {
     callback(false);
   });
 
+  autostart.initAutostart();
   createWindow();
 
   app.on('activate', () => {
@@ -98,3 +101,27 @@ ipcMain.handle('discord-now-playing', (_, payload) => {
 ipcMain.handle('discord-clear-presence', () => {
   clearPresence();
 });
+
+// ── IPC: foto de perfil (solo local, nunca al servidor) ────────
+ipcMain.handle('save-profile-picture',  (_, dataUrl) => localData.saveProfilePicture(dataUrl));
+ipcMain.handle('get-profile-picture',   () => localData.getProfilePicture());
+ipcMain.handle('clear-profile-picture', () => localData.clearProfilePicture());
+
+// ── IPC: descargas offline (canciones y playlists) ─────────────
+ipcMain.handle('download-song',        (_, songId, url) => localData.downloadSong(songId, url));
+ipcMain.handle('delete-song-file',     (_, songId) => localData.deleteSongFile(songId));
+ipcMain.handle('is-song-downloaded',   (_, songId) => localData.isSongDownloaded(songId));
+ipcMain.handle('get-local-song-path',  (_, songId) => localData.getLocalSongPath(songId));
+ipcMain.handle('get-downloads-info',   () => localData.getDownloadsInfo());
+
+ipcMain.handle('save-offline-playlist',   (_, playlist) => localData.saveOfflinePlaylist(playlist));
+ipcMain.handle('get-offline-playlists',   () => localData.getOfflinePlaylists());
+ipcMain.handle('delete-offline-playlist', (_, playlistId) => localData.deleteOfflinePlaylist(playlistId));
+
+// ── IPC: gestión de caché ───────────────────────────────────────
+ipcMain.handle('get-cache-size',  () => localData.getCacheSize());
+ipcMain.handle('clear-song-cache', () => localData.clearSongCache());
+
+// ── IPC: inicio automático con el sistema ───────────────────────
+ipcMain.handle('get-launch-on-startup', () => autostart.getLaunchOnStartup());
+ipcMain.handle('set-launch-on-startup', (_, enabled) => autostart.setLaunchOnStartup(enabled));

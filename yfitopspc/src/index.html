@@ -5,14 +5,76 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>YFitops</title>
+  <script>
+    // Aplicar el tema guardado ANTES de pintar, para evitar parpadeos (FOUC)
+    (function () {
+      try {
+        var saved = localStorage.getItem('yfitops_theme');
+        document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #0a0a0a; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; }
+
+    /* ── Tema oscuro (por defecto) ─────────────────────────── */
+    :root[data-theme="dark"] {
+      --bg0: #0a0a0a;
+      --bg1: #0f0f0f;
+      --bg2: #111111;
+      --bg3: #1a1a1a;
+      --bg4: #1e1e1e;
+      --border: #222222;
+      --border-strong: #2a2a2a;
+      --text: #ffffff;
+      --text-secondary: #cccccc;
+      --text-muted: #888888;
+      --text-dim: #666666;
+      --text-faint: #444444;
+      --scrollbar-track: #111111;
+      --scrollbar-thumb: #333333;
+      --scrollbar-thumb-hover: #444444;
+      --overlay: rgba(0, 0, 0, 0.75);
+      --playerbar-grad-1: #0e0e0e;
+      --playerbar-grad-2: #151515;
+    }
+
+    /* ── Tema claro ─────────────────────────────────────────── */
+    :root[data-theme="light"] {
+      --bg0: #f4f4f6;
+      --bg1: #ffffff;
+      --bg2: #ffffff;
+      --bg3: #ececec;
+      --bg4: #e6e6e6;
+      --border: #e0e0e0;
+      --border-strong: #d2d2d2;
+      --text: #111111;
+      --text-secondary: #333333;
+      --text-muted: #6e6e6e;
+      --text-dim: #8a8a8a;
+      --text-faint: #aaaaaa;
+      --scrollbar-track: #ececec;
+      --scrollbar-thumb: #cccccc;
+      --scrollbar-thumb-hover: #b8b8b8;
+      --overlay: rgba(20, 20, 20, 0.5);
+      --playerbar-grad-1: #ffffff;
+      --playerbar-grad-2: #f0f0f0;
+    }
+
+    body {
+      background: var(--bg0);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
     #root { width: 100vw; height: 100vh; }
     ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #111; }
-    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #444; }
+    ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
   </style>
 </head>
 <body>

@@ -14,4 +14,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Discord Rich Presence
   discordUpdate: (payload)       => ipcRenderer.invoke('discord-now-playing', payload),
   discordClear:  ()               => ipcRenderer.invoke('discord-clear-presence'),
+  // Foto de perfil (guardada solo en este dispositivo)
+  saveProfilePicture:  (dataUrl) => ipcRenderer.invoke('save-profile-picture', dataUrl),
+  getProfilePicture:   ()        => ipcRenderer.invoke('get-profile-picture'),
+  clearProfilePicture: ()        => ipcRenderer.invoke('clear-profile-picture'),
+  // Descargas offline
+  downloadSong:        (songId, url) => ipcRenderer.invoke('download-song', songId, url),
+  deleteSongFile:      (songId)      => ipcRenderer.invoke('delete-song-file', songId),
+  isSongDownloaded:    (songId)      => ipcRenderer.invoke('is-song-downloaded', songId),
+  getLocalSongPath:    (songId)      => ipcRenderer.invoke('get-local-song-path', songId),
+  getDownloadsInfo:    ()            => ipcRenderer.invoke('get-downloads-info'),
+  saveOfflinePlaylist:   (playlist)    => ipcRenderer.invoke('save-offline-playlist', playlist),
+  getOfflinePlaylists:   ()            => ipcRenderer.invoke('get-offline-playlists'),
+  deleteOfflinePlaylist: (playlistId)  => ipcRenderer.invoke('delete-offline-playlist', playlistId),
+  // Caché
+  getCacheSize:   () => ipcRenderer.invoke('get-cache-size'),
+  clearSongCache: () => ipcRenderer.invoke('clear-song-cache'),
+  // Inicio automático con el sistema
+  getLaunchOnStartup: ()          => ipcRenderer.invoke('get-launch-on-startup'),
+  setLaunchOnStartup: (enabled)   => ipcRenderer.invoke('set-launch-on-startup', enabled),
 });

@@ -4,6 +4,7 @@ import { SERVER_URL } from '../api';
 import PlayerModal from './PlayerModal';
 import QueueView from './QueueView';
 import { useState } from 'react';
+import { useT } from '../i18n';
 
 const VolumeIcon = ({ volume }) => {
   if (volume === 0) return (
@@ -46,6 +47,7 @@ export default function PlayerBar() {
   } = useMusicStore();
   const [modalOpen, setModalOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  const t = useT();
 
   if (!currentSong) return null;
 
@@ -103,7 +105,7 @@ export default function PlayerBar() {
             <button
               style={{ ...styles.queueBtn, ...(queueOpen ? styles.queueBtnActive : {}) }}
               onClick={() => setQueueOpen(v => !v)}
-              title="Cola de reproducción"
+              title={t('player.queue')}
             >
               <QueueIcon active={queueOpen} />
               {queue.length > 0 && <span style={styles.queueBadge}>{queue.length}</span>}
@@ -113,7 +115,7 @@ export default function PlayerBar() {
               <button
                 style={styles.volBtn}
                 onClick={() => setVolume(volume === 0 ? 0.7 : 0)}
-                title="Silenciar"
+                title={t('player.mute')}
               >
                 <VolumeIcon volume={volume} />
               </button>
@@ -141,10 +143,10 @@ export default function PlayerBar() {
         @keyframes eq1 { 0%, 100% { height: 4px; } 50% { height: 14px; } }
         .eq-bar { display: inline-block; width: 3px; background: #1ed760; border-radius: 2px; animation: eq1 0.8s ease-in-out infinite; }
         .vol-range { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; width: 100%; height: 4px; position: absolute; inset: 0; margin: 0; z-index: 2; }
-        .vol-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.5); transition: transform 0.15s, background 0.15s; }
+        .vol-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.5); transition: transform 0.15s, background 0.15s; }
         .vol-range:hover::-webkit-slider-thumb { transform: scale(1.3); background: #1ed760; }
         .vol-range::-webkit-slider-runnable-track { background: transparent; height: 4px; }
-        .vol-range::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: none; cursor: pointer; }
+        .vol-range::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: none; cursor: pointer; }
         .vol-range::-moz-range-track { background: transparent; height: 4px; }
       `}</style>
     </>
@@ -154,11 +156,11 @@ export default function PlayerBar() {
 const styles = {
   bar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    background: 'linear-gradient(to top, #0e0e0e 0%, #151515 100%)',
-    borderTop: '1px solid #222',
+    background: 'linear-gradient(to top, var(--playerbar-grad-1) 0%, var(--playerbar-grad-2) 100%)',
+    borderTop: '1px solid var(--border)',
     zIndex: 100,
   },
-  progressTrack: { height: 2, background: '#1e1e1e' },
+  progressTrack: { height: 2, background: 'var(--bg4)' },
   progressFill: {
     height: 2,
     background: 'linear-gradient(90deg, #1ed760, #17a349)',
@@ -171,21 +173,21 @@ const styles = {
   cover: { width: 44, height: 44, borderRadius: 8, objectFit: 'cover', display: 'block' },
   coverEmpty: {
     width: 44, height: 44, borderRadius: 8,
-    background: '#252525', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: '#444', fontSize: 18,
+    background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: 'var(--text-faint)', fontSize: 18,
   },
   playingRing: {
     position: 'absolute', inset: -2, borderRadius: 10,
     border: '1.5px solid #1ed76060', pointerEvents: 'none',
   },
   info: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 },
-  title: { color: '#fff', fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  artist: { color: '#555', fontSize: 12 },
+  title: { color: 'var(--text)', fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  artist: { color: 'var(--text-dim)', fontSize: 12 },
   equalizer: { display: 'flex', alignItems: 'flex-end', gap: 2, height: 16, marginLeft: 6, flexShrink: 0 },
 
   controls: { display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 },
   btn: {
-    background: 'none', border: 'none', cursor: 'pointer', color: '#888',
+    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
     width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
     borderRadius: '50%',
   },
@@ -198,9 +200,9 @@ const styles = {
   right: { flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 },
 
   queueBtn: {
-    position: 'relative', background: '#1a1a1a', border: '1px solid #252525',
+    position: 'relative', background: 'var(--bg3)', border: '1px solid var(--border-strong)',
     borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
-    color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   queueBtnActive: { background: '#1ed76015', borderColor: '#1ed76050' },
   queueBadge: {
@@ -212,15 +214,15 @@ const styles = {
 
   volWrap: {
     display: 'flex', alignItems: 'center', gap: 8,
-    background: '#1a1a1a', border: '1px solid #252525',
+    background: 'var(--bg3)', border: '1px solid var(--border-strong)',
     borderRadius: 24, padding: '6px 14px',
   },
   volBtn: {
     background: 'none', border: 'none', cursor: 'pointer',
-    color: '#888', display: 'flex', alignItems: 'center', padding: 0, flexShrink: 0,
+    color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: 0, flexShrink: 0,
   },
   volTrackWrap: { position: 'relative', width: 90, height: 4, display: 'flex', alignItems: 'center' },
-  volTrackBg: { position: 'absolute', inset: 0, background: '#333', borderRadius: 2 },
+  volTrackBg: { position: 'absolute', inset: 0, background: 'var(--border-strong)', borderRadius: 2 },
   volTrackFill: { position: 'absolute', left: 0, top: 0, bottom: 0, background: '#1ed760', borderRadius: 2, pointerEvents: 'none', transition: 'width 0.05s' },
-  volPct: { color: '#555', fontSize: 11, fontWeight: 700, width: 24, textAlign: 'right', flexShrink: 0 },
+  volPct: { color: 'var(--text-dim)', fontSize: 11, fontWeight: 700, width: 24, textAlign: 'right', flexShrink: 0 },
 };

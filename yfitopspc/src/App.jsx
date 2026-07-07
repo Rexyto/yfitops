@@ -1,24 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import useMusicStore from './store/MusicStore';
+import useSettingsStore from './store/SettingsStore';
+import { useT } from './i18n';
 import { pcVersion, pcChangelog, pcVerify } from './api';
 import LoginScreen from './components/LoginScreen';
 import Sidebar from './components/Sidebar';
 import SongsView from './components/SongsView';
 import FavoritesView from './components/FavoritesView';
 import PlaylistsView from './components/PlaylistsView';
+import SettingsView from './components/SettingsView';
 import PlayerBar from './components/PlayerBar';
 
 // Barra de título custom (frameless window)
 function TitleBar() {
+  const t = useT();
   return (
     <div style={titleStyles.bar}>
       {/* Región draggable — ocupa todo el espacio */}
       <div style={titleStyles.drag} />
       {/* Botones de ventana */}
       <div style={titleStyles.controls}>
-        <button style={titleStyles.btn} onClick={() => window.electronAPI?.minimize()} title="Minimizar">─</button>
-        <button style={titleStyles.btn} onClick={() => window.electronAPI?.maximize()} title="Maximizar">□</button>
-        <button style={{ ...titleStyles.btn, ...titleStyles.closeBtn }} onClick={() => window.electronAPI?.close()} title="Cerrar">✕</button>
+        <button style={titleStyles.btn} onClick={() => window.electronAPI?.minimize()} title={t('title.minimize')}>─</button>
+        <button style={titleStyles.btn} onClick={() => window.electronAPI?.maximize()} title={t('title.maximize')}>□</button>
+        <button style={{ ...titleStyles.btn, ...titleStyles.closeBtn }} onClick={() => window.electronAPI?.close()} title={t('title.close')}>✕</button>
       </div>
     </div>
   );
@@ -26,9 +30,9 @@ function TitleBar() {
 
 const titleStyles = {
   bar: {
-    height: 32, background: '#0a0a0a',
+    height: 32, background: 'var(--bg0)',
     display: 'flex', alignItems: 'center',
-    borderBottom: '1px solid #1a1a1a',
+    borderBottom: '1px solid var(--border)',
     flexShrink: 0,
     // Sin -webkit-app-region aquí — lo ponemos solo en el área de drag
   },
@@ -43,16 +47,28 @@ const titleStyles = {
   btn: {
     width: 46, height: 32,
     background: 'none', border: 'none',
-    color: '#888', fontSize: 14,
+    color: 'var(--text-muted)', fontSize: 14,
     cursor: 'pointer', display: 'flex',
     alignItems: 'center', justifyContent: 'center',
     transition: 'background 0.1s',
   },
-  closeBtn: { color: '#fff' },
+  closeBtn: { color: 'var(--text)' },
 };
+
+// Aviso de "sin conexión" — aparece y desaparece solo, sin recargar nada
+function OfflineBanner() {
+  const t = useT();
+  return (
+    <div style={styles.offlineBanner}>
+      {t('offline.banner')}
+    </div>
+  );
+}
 
 export default function App() {
   const { token, login, currentSong } = useMusicStore();
+  const { isOnline } = useSettingsStore();
+  const t = useT();
   const [tab, setTab] = useState('songs');
   const [checking, setChecking] = useState(true);
   const [appVersion, setAppVersion] = useState(null);
@@ -60,6 +76,11 @@ export default function App() {
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [changelogNotes, setChangelogNotes] = useState('');
+
+  // Inicializar ajustes (tema, foto de perfil, descargas, conectividad)
+  useEffect(() => {
+    useSettingsStore.getState().init();
+  }, []);
 
   // Al arrancar: recuperar sesión guardada en disco
   useEffect(() => {
@@ -134,10 +155,10 @@ export default function App() {
 
   if (checking) {
     return (
-      <div style={{ width: '100vw', height: '100vh', background: '#0a0a0a', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '100vw', height: '100vh', background: 'var(--bg0)', display: 'flex', flexDirection: 'column' }}>
         <TitleBar />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ color: '#555', fontSize: 14 }}>Cargando...</span>
+          <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>{t('app.loading')}</span>
         </div>
       </div>
     );
@@ -145,7 +166,7 @@ export default function App() {
 
   if (!token) {
     return (
-      <div style={{ width: '100vw', height: '100vh', background: '#0a0a0a', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '100vw', height: '100vh', background: 'var(--bg0)', display: 'flex', flexDirection: 'column' }}>
         <TitleBar />
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <LoginScreen />
@@ -158,14 +179,16 @@ export default function App() {
     if (tab === 'songs')     return <SongsView />;
     if (tab === 'favorites') return <FavoritesView />;
     if (tab === 'playlists') return <PlaylistsView />;
+    if (tab === 'settings')  return <SettingsView appVersion={appVersion} />;
     return null;
   };
 
   return (
     <div style={styles.root}>
       <TitleBar />
+      {!isOnline && <OfflineBanner />}
       <div style={styles.body}>
-        <Sidebar tab={tab} setTab={setTab} version={appVersion} />
+        <Sidebar tab={tab} setTab={setTab} />
         <div style={styles.main}>
           <div style={{ ...styles.content, paddingBottom: currentSong ? 96 : 0 }}>
             {renderView()}
@@ -177,17 +200,17 @@ export default function App() {
       {showUpdatePrompt && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalBox}>
-            <h2 style={styles.modalTitle}>⚠️ Nueva versión disponible</h2>
+            <h2 style={styles.modalTitle}>{t('update.available')}</h2>
             <p style={styles.modalText}>
-              Versión local: {appVersion || 'desconocida'}<br />
-              Versión servidor: {serverVersion || 'desconocida'}
+              {t('update.localVersion')} {appVersion || '—'}<br />
+              {t('update.serverVersion')} {serverVersion || '—'}
             </p>
             <div style={styles.modalActions}>
               <button style={styles.primaryBtn} onClick={() => window.electronAPI?.openExternal('https://yfitops.duckdns.org')}>
-                Descargar actualización
+                {t('update.download')}
               </button>
               <button style={styles.secondaryBtn} onClick={() => setShowUpdatePrompt(false)}>
-                Continuar de todas formas
+                {t('update.continueAnyway')}
               </button>
             </div>
           </div>
@@ -197,15 +220,15 @@ export default function App() {
       {showChangelog && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalBox}>
-            <h2 style={styles.modalTitle}>Novedades de la versión {serverVersion || appVersion}</h2>
-            <p style={styles.modalText}>La aplicación está actualizada. Estas son las novedades:</p>
+            <h2 style={styles.modalTitle}>{t('changelog.title', serverVersion || appVersion)}</h2>
+            <p style={styles.modalText}>{t('changelog.upToDate')}</p>
             <div style={styles.changelogContent}>
               {changelogNotes.split('\n').map((line, index) => line.trim() ? (
                 <p key={index} style={styles.changelogLine}>{line.trim()}</p>
               ) : null)}
             </div>
             <button style={styles.primaryBtn} onClick={() => setShowChangelog(false)}>
-              Cerrar
+              {t('common.close')}
             </button>
           </div>
         </div>
@@ -218,7 +241,12 @@ const styles = {
   root: {
     display: 'flex', flexDirection: 'column',
     width: '100vw', height: '100vh',
-    background: '#0a0a0a', overflow: 'hidden',
+    background: 'var(--bg0)', overflow: 'hidden',
+  },
+  offlineBanner: {
+    flexShrink: 0, padding: '8px 20px',
+    background: '#ff555518', borderBottom: '1px solid #ff555540',
+    color: '#ff8080', fontSize: 12.5, fontWeight: 700, textAlign: 'center',
   },
   body: {
     flex: 1, display: 'flex', overflow: 'hidden',
@@ -231,27 +259,27 @@ const styles = {
     flex: 1, overflowY: 'auto', overflowX: 'hidden',
   },
   modalOverlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+    position: 'fixed', inset: 0, background: 'var(--overlay)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999,
   },
   modalBox: {
-    width: 520, maxWidth: '90%', background: '#101010', border: '1px solid #2a2a2a', borderRadius: 18,
-    padding: 28, boxShadow: '0 24px 60px rgba(0,0,0,0.45)', color: '#f5f5f5',
+    width: 520, maxWidth: '90%', background: 'var(--bg2)', border: '1px solid var(--border-strong)', borderRadius: 18,
+    padding: 28, boxShadow: '0 24px 60px rgba(0,0,0,0.45)', color: 'var(--text)',
   },
-  modalTitle: { margin: 0, fontSize: 22, color: '#fff' },
-  modalText: { marginTop: 16, lineHeight: 1.6, color: '#ccc', fontSize: 14 },
+  modalTitle: { margin: 0, fontSize: 22, color: 'var(--text)' },
+  modalText: { marginTop: 16, lineHeight: 1.6, color: 'var(--text-secondary)', fontSize: 14 },
   modalActions: { marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' },
   primaryBtn: {
     background: '#1ed760', color: '#000', border: 'none', borderRadius: 10,
     padding: '12px 18px', cursor: 'pointer', fontWeight: 700, minWidth: 180,
   },
   secondaryBtn: {
-    background: '#181818', color: '#fff', border: '1px solid #444', borderRadius: 10,
+    background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border-strong)', borderRadius: 10,
     padding: '12px 18px', cursor: 'pointer', fontWeight: 700, minWidth: 180,
   },
   changelogContent: {
-    marginTop: 18, padding: 16, background: '#141414', borderRadius: 12, border: '1px solid #222', maxHeight: 320,
-    overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: 13, color: '#ddd',
+    marginTop: 18, padding: 16, background: 'var(--bg3)', borderRadius: 12, border: '1px solid var(--border)', maxHeight: 320,
+    overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: 13, color: 'var(--text-secondary)',
   },
   changelogLine: { margin: '8px 0' },
 };

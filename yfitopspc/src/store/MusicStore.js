@@ -193,7 +193,7 @@ const useMusicStore = create((set, get) => ({
     window.electronAPI?.discordClear();
   },
 
-  playSong: (song, playlist = []) => {
+  playSong: async (song, playlist = []) => {
     const { token } = get();
 
     // Calcular tiempo escuchado antes de cambiar de canción
@@ -205,7 +205,11 @@ const useMusicStore = create((set, get) => ({
     const pl = playlist.length > 0 ? playlist : [song];
     const idx = pl.findIndex(s => s.id === song.id);
 
-    _audio = new Audio(`${SERVER_URL}${song.url}`);
+    // Si la canción está descargada, se reproduce desde disco (offline);
+    // si no, se hace streaming desde el servidor como siempre.
+    let localPath = null;
+    try { localPath = await window.electronAPI?.getLocalSongPath(song.id); } catch {}
+    _audio = new Audio(localPath || `${SERVER_URL}${song.url}`);
     _audio.volume = get().volume;
 
     _audio.addEventListener('timeupdate',     () => set({ position: _audio.currentTime * 1000 }));
