@@ -2,13 +2,19 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { useEffect, useState } from 'react';
 
 import Layout from './components/Layout';
+import PublicLayout from './components/PublicLayout';
 
+import LandingPage from './pages/LandingPage';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
+import NotFoundPage from './pages/NotFoundPage';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import UsersPage from './pages/UsersPage';
 import StatsPage from './pages/StatsPage';
 import VersionPage from './pages/VersionPage';
 import ApiKeysPage from './pages/ApiKeysPage';
+import CreditsPage from './pages/CreditsPage';
 
 interface User {
   username: string;
@@ -99,6 +105,14 @@ export default function App() {
           }
         />
 
+        {/* 🌐 PÁGINAS PÚBLICAS */}
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+
         {/* 🔐 RUTAS PROTEGIDAS */}
         <Route
           element={
@@ -113,20 +127,9 @@ export default function App() {
           <Route path="/stats" element={<StatsPage user={user!} />} />
           <Route path="/version" element={<VersionPage />} />
           <Route path="/api-keys" element={<ApiKeysPage user={user!} />} />
+          <Route path="/credits" element={<CreditsPage user={user!} />} />
 
         </Route>
-
-        {/* ROOT */}
-        <Route
-          path="/"
-          element={<Navigate to={user ? "/home" : "/login"} replace />}
-        />
-
-        {/* 404 fallback */}
-        <Route
-          path="*"
-          element={<Navigate to="/" replace />}
-        />
 
       </Routes>
     </BrowserRouter>

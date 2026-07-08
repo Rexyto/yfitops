@@ -42,6 +42,12 @@ const ApiIcon = () => (
   </svg>
 );
 
+const CreditsIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z" />
+  </svg>
+);
+
 const LogoutIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4m7 14l5-5-5-5m5 5H9"/>
@@ -53,13 +59,6 @@ const MenuIcon = () => (
     <line x1="3" y1="12" x2="21" y2="12"/>
     <line x1="3" y1="6" x2="21" y2="6"/>
     <line x1="3" y1="18" x2="21" y2="18"/>
-  </svg>
-);
-
-const CloseIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <line x1="18" y1="6" x2="6" y2="18"/>
-    <line x1="6" y1="6" x2="18" y2="18"/>
   </svg>
 );
 
@@ -79,7 +78,8 @@ export default function Layout({
     { path: '/users', label: 'Usuarios', icon: UsersIcon, admin: true },
     { path: '/stats', label: 'Stats', icon: StatsIcon },
     { path: '/api-keys', label: 'APIs', icon: ApiIcon, admin: true },
-    { path: '/version', label: 'Version', icon: VersionIcon }
+    { path: '/version', label: 'Version', icon: VersionIcon },
+    { path: '/credits', label: 'Créditos', icon: CreditsIcon }
   ];
 
   return (
@@ -94,9 +94,6 @@ export default function Layout({
             <img src="/logo.png" alt="YFitops Logo" style={{ height: '28px', width: 'auto', marginRight: '8px' }} />
             YFitops
           </div>
-          <button className="sidebar-close" onClick={() => setSidebarOpen(false)}>
-            <CloseIcon />
-          </button>
         </div>
 
         <nav className="sidebar-nav">

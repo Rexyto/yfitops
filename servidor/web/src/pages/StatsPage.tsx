@@ -251,10 +251,8 @@ export default function StatsPage({ user }: StatsPageProps) {
   );
 
   if (error) return (
-    <div style={{ padding: 32 }}>
-      <div style={{ color: '#ef4444', background: '#ff000011', border: '1px solid #ff000033', borderRadius: 10, padding: '12px 16px', fontSize: 14 }}>
-        {error}
-      </div>
+    <div className="page">
+      <div className="alert alert-error">{error}</div>
     </div>
   );
 
@@ -270,15 +268,15 @@ export default function StatsPage({ user }: StatsPageProps) {
   const latencyHealthColor = avgLat === null ? '#555' : avgLat < 100 ? '#1ed760' : avgLat < 500 ? '#f59e0b' : '#ef4444';
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 960, margin: '0 auto', width: '100%' }}>
+    <div className="page" style={{ maxWidth: 1100 }}>
       {/* Inject pulse keyframe */}
       <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
 
       {/* Header */}
-      <div style={{ marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.5px' }}>Estadísticas</div>
-          <div style={{ color: '#555', fontSize: 13, marginTop: 4 }}>Actividad del servidor</div>
+          <div className="page-title">Estadísticas</div>
+          <div className="page-subtitle">Actividad del servidor</div>
         </div>
         {lastUpdated && (
           <div style={{ color: '#333', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
