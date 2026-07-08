@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://yfitops.duckdns.org/YFitopsTV"
+        version="1.0.0"
+        viewmodes="fullscreen">
+
+    <!--
+      IMPORTANTE — LEE ESTO ANTES DE COMPILAR:
+      El atributo "id" y "package" de tizen:application DEBEN coincidir con el
+      certificado Samsung que generes en Tizen Studio (Certificate Manager).
+      El valor "aBcDeFgHiJ" de abajo es un PLACEHOLDER de 10 caracteres.
+      Tizen Studio te dará tu propio ID de 10 caracteres al crear tu perfil
+      de firma para Samsung. Sustituye "aBcDeFgHiJ" por el tuyo en los
+      2 sitios donde aparece (id y package). Ver README.md, paso 2.
+    -->
+    <tizen:application id="aBcDeFgHiJ.YFitopsTV"
+                        package="aBcDeFgHiJ"
+                        required_version="4.0"/>
+
+    <content src="index.html"/>
+    <icon src="icon.png"/>
+    <name>YFitops</name>
+    <tizen:profile name="tv"/>
+
+    <!-- Permite peticiones fetch/XHR a tu servidor (y a cualquier origen) -->
+    <access origin="*" subdomains="true"/>
+
+    <feature name="http://tizen.org/feature/screen.size.normal.1920.1080"/>
+
+    <tizen:setting screen-orientation="landscape"
+                    context-menu="disable"
+                    background-support="disable"
+                    encryption="disable"
+                    install-location="auto"
+                    hwkey-event="enable"/>
+
+    <!-- Necesario para que el navegador Tizen permita tráfico de red -->
+    <tizen:metadata key="http://samsung.com/tv/metadata/use.network.transfer" value="true"/>
+
+</widget>

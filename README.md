@@ -1,6 +1,6 @@
 # YFitops
 
-> Ecosistema multiplataforma de música: servidor backend, app de escritorio para Windows, panel web administrativo y bots. (Por ahora no se sube el código de la app móvil.)
+> Ecosistema multiplataforma de música: servidor backend, app de escritorio para Windows/Linux, app de Samsung Smart TV, panel web administrativo y bots. (Por ahora no se sube el código de la app móvil.)
 
 ---
 
@@ -15,6 +15,7 @@
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Carpeta data/](#carpeta-data)
 - [App de escritorio (Windows y Linux)](#app-de-escritorio-windows-y-linux)
+- [App de Samsung TV (Tizen)](#app-de-samsung-tv-tizen)
 - [Canciones, portadas y playlists](#canciones-portadas-y-playlists)
 - [APIs](#apis)
 - [Seguridad](#seguridad)
@@ -301,33 +302,67 @@ yfitops/
 │   ├── node_modules/              # Dependencias (no versionar)
 │   └── web/                       # Panel administrativo React/Vite
 │
-└── yfitopspc/                   # App de escritorio Electron — genera tanto el instalador de Windows como el binario de Linux
-    ├── main.js                  # Proceso principal de Electron
-    ├── preload.js               # Puente seguro entre Electron y el renderer (contextBridge)
-    ├── discordRpc.js            # Discord Rich Presence ("reproduciendo ahora")
-    ├── webpack.config.js        # Bundler del renderer (React)
+├── yfitopspc/                   # App de escritorio Electron — genera tanto el instalador de Windows como el binario de Linux
+│   ├── main.js                  # Proceso principal de Electron
+│   ├── preload.js               # Puente seguro entre Electron y el renderer (contextBridge)
+│   ├── discordRpc.js            # Discord Rich Presence ("reproduciendo ahora")
+│   ├── webpack.config.js        # Bundler del renderer (React)
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── assets/                  # Iconos de la app (.ico, etc.)
+│   ├── public/                  # Estáticos copiados tal cual al build (logo, index.html base)
+│   ├── dist/                    # Build del renderer generado por webpack (no versionar)
+│   ├── release/                 # Instaladores/ejecutables generados (no versionar)
+│   ├── node_modules/            # Dependencias (no versionar)
+│   └── src/                     # Código fuente del renderer (React)
+│       ├── index.html
+│       ├── index.jsx            # Punto de entrada de React
+│       ├── App.jsx              # Componente raíz, título custom, updates, changelog
+│       ├── api.js               # Llamadas a la API del servidor → /pc/*
+│       ├── store/
+│       │   └── MusicStore.js    # Estado global (zustand): auth, canciones, reproductor, heartbeat, Discord RPC
+│       └── components/
+│           ├── LoginScreen.jsx
+│           ├── Sidebar.jsx
+│           ├── SongsView.jsx
+│           ├── FavoritesView.jsx
+│           ├── PlaylistsView.jsx
+│           ├── PlayerBar.jsx
+│           └── PlayerModal.jsx
+│
+└── yfitops-samsungtv/            # App de Samsung Smart TV (Tizen) — navegador Tizen puro, sin Electron
+    ├── config.xml                # Manifiesto Tizen: id de la app, certificado, permisos de red
+    ├── icon.png                  # Icono de la app en el menú "Apps" de la TV
     ├── package.json
-    ├── package-lock.json
-    ├── assets/                  # Iconos de la app (.ico, etc.)
-    ├── public/                  # Estáticos copiados tal cual al build (logo, index.html base)
-    ├── dist/                    # Build del renderer generado por webpack (no versionar)
-    ├── release/                 # Instaladores/ejecutables generados (no versionar)
-    ├── node_modules/            # Dependencias (no versionar)
-    └── src/                     # Código fuente del renderer (React)
+    ├── webpack.config.js         # Bundler del renderer (React), target "web" en vez de "electron-renderer"
+    ├── public/
+    │   └── logo.png              # Logo dentro de la app (login y barra lateral)
+    ├── dist/                     # Build generado por webpack + proyecto Tizen listo para empaquetar (no versionar)
+    └── src/                      # Código fuente del renderer (React), adaptado de yfitopspc/src
         ├── index.html
-        ├── index.jsx            # Punto de entrada de React
-        ├── App.jsx              # Componente raíz, título custom, updates, changelog
-        ├── api.js               # Llamadas a la API del servidor → /pc/*
+        ├── index.jsx             # Punto de entrada de React; carga tv/tvBridge.js antes que nada
+        ├── App.jsx               # Componente raíz (sin barra de título, apps Tizen van a pantalla completa)
+        ├── api.js                # Llamadas a la API del servidor → /pc/* (mismo backend que yfitopspc)
+        ├── tv/
+        │   ├── tvBridge.js       # Sustituye window.electronAPI: sesión y foto de perfil vía localStorage
+        │   ├── tvNavigation.js   # Navegación espacial con el mando (flechas/OK) + teclas multimedia
+        │   └── backStack.js      # Pila de "capas" que se cierran con la tecla Atrás del mando
+        ├── i18n/
+        │   ├── index.js
+        │   └── translations.js  # Sin las claves de autostart/descargas offline (funciones no existen aquí)
         ├── store/
-        │   └── MusicStore.js    # Estado global (zustand): auth, canciones, reproductor, heartbeat, Discord RPC
+        │   ├── MusicStore.js    # Igual que en PC pero sin Discord RPC y sin reproducción desde disco (solo streaming)
+        │   └── SettingsStore.js # Igual que en PC pero sin descargas offline, caché ni autostart
         └── components/
             ├── LoginScreen.jsx
             ├── Sidebar.jsx
             ├── SongsView.jsx
             ├── FavoritesView.jsx
             ├── PlaylistsView.jsx
+            ├── SettingsView.jsx  # Sin secciones de Sistema/Descargas/Almacenamiento
             ├── PlayerBar.jsx
-            └── PlayerModal.jsx
+            ├── PlayerModal.jsx
+            └── QueueView.jsx
 ```
 
 >  **`app/` (Android):** por ahora no se sube el código fuente de la app móvil. Se documentará y publicará más adelante.
@@ -503,47 +538,110 @@ sudo apt remove yfitops
 
 ---
 
-## APIs
+## App de Samsung TV (Tizen)
 
-La documentación completa de cada endpoint, con parámetros, cuerpos de petición y ejemplos de respuesta, está en [API_DOCUMENTATION.md](./API_DOCUMENTATION.md).
+La app de Samsung Smart TV (`yfitops-samsungtv/`) es un puerto de la app de escritorio adaptado a **Tizen** (el sistema de las Smart TV de Samsung). A diferencia de `yfitopspc/`, aquí **no hay Electron ni proceso Node**: es una app web pura (React + webpack) que corre dentro del navegador Tizen integrado en la TV, empaquetada como `.wgt`. Se conecta al mismo backend, por las mismas rutas `/pc/*`.
 
-| Prefijo | Plataforma | Autenticación | Duración de sesión |
-|---|---|---|---|
-| `/api/` | Android | Bearer token | 30 días |
-| `/pc/` | Windows | Bearer token | 30 días |
-| `/web/` | Panel admin | Cookie JWT | 3 días |
-| `/bot/` | Bots | API key | — |
+Probado sobre una Samsung serie N de 2018 (`required_version="4.0"` en `config.xml`); para modelos más nuevos con Tizen 5.5/6.0 no debería hacer falta tocar nada.
 
-### Flujo de autenticación
+### Diferencias respecto a `yfitopspc/`
 
-1. El cliente envía credenciales al endpoint de login de su plataforma.
-2. El servidor verifica el hash de la contraseña.
-3. El servidor emite un JWT (o cookie `web_token` para el panel web).
-4. El cliente incluye el token en cada petición: `Authorization: Bearer <token>`.
-5. El middleware valida el token antes de ejecutar el handler.
+No tiene sentido llevar 1:1 todo lo de la app de PC a una TV, así que en `yfitops-samsungtv/` se ha quitado:
 
----
+- **Discord Rich Presence** (`discordRpc.js` no existe en esta versión).
+- **Inicio automático con el sistema** (una Smart TV no tiene "inicio de sesión de SO" al que engancharse).
+- **Descargas para escuchar sin conexión**: se asume que la TV siempre está conectada por red, así que siempre reproduce en streaming.
+- **Barra de título / minimizar / maximizar / cerrar**: las apps de Tizen TV van siempre a pantalla completa.
 
-## Seguridad
+Y se ha añadido:
 
-- Contraseñas hasheadas con SHA-256 + salt.
-- Tokens JWT con expiración configurable.
-- CORS habilitado para múltiples orígenes.
-- Validación de tipo y tamaño de archivo en subidas.
-- Middlewares de autenticación en todas las rutas protegidas.
-- Acceso al panel web restringido a rol `superadmin`.
+- **Navegación espacial con el mando** (`tv/tvNavigation.js`): las flechas mueven el foco entre botones, filas de canciones, tarjetas, etc.; "OK/Enter" activa lo enfocado.
+- **Tecla Atrás/Volver del mando** (`tv/backStack.js`): cierra el reproductor grande, la cola o el editor de canción, o vuelve de una colección a la lista; si no hay nada abierto, cierra la app.
+- **Botones multimedia del mando** (▶️⏸⏭⏮, si el mando los tiene), enganchados directamente a la reproducción.
+- **`tv/tvBridge.js`**: sustituye a `window.electronAPI` (que en PC expone `preload.js`) por una versión que guarda sesión y foto de perfil en `localStorage` en vez de en disco, ya que aquí no hay proceso Electron que escriba archivos.
 
----
+### Requisitos
 
-## Sincronización de carpetas
+- Node.js 18+.
+- [Tizen Studio](https://developer.tizen.org/development/tizen-studio/download) con el paquete **TV Extensions** instalado desde el Package Manager (trae las herramientas de línea de comandos `tizen` y `sdb` en `tools\ide\bin\`).
+- Un certificado de firma de Samsung (Tizen Studio → Certificate Manager) para instalar en una TV real fuera del modo de solo-emulador.
+- La TV en la misma red local que el PC, y en **modo desarrollador** (Apps → pulsar `12345` con el mando → Developer mode → ON → IP del PC).
 
-El servidor vigila automáticamente `/playlist/` y `/canciones/`. Cualquier cambio se detecta en tiempo real sin necesidad de reiniciar.
+### Compilar el bundle web
 
-Para forzar una sincronización manual desde el cliente:
-
-```http
-POST /api/sync
+```bash
+cd yfitops-samsungtv
+npm install
+npm run build
 ```
+
+Esto genera `dist/` con `index.html`, `bundle.js`, `config.xml` e `icon.png` — un proyecto Tizen completo, listo para empaquetar.
+
+### Empaquetar con la CLI de Tizen (`tizen package`)
+
+En vez de pasar por la GUI de Tizen Studio (`Import` → `Run As`), se puede empaquetar directamente por línea de comandos apuntando al binario dentro de la instalación de Tizen Studio:
+
+```bat
+cd yfitops-samsungtv\dist
+C:\tizen-studio\tools\ide\bin\tizen package -t wgt
+```
+
+Esto firma el paquete (con el certificado por defecto si no has configurado uno propio) y genera `YFitops.wgt` dentro de `dist/`. Si ves este aviso:
+
+```text
+WARNING: Default profile is used for sign. This signed package is valid for emulator test only.
+```
+
+significa que se ha firmado con el certificado temporal (`tempMobile.p12`) que trae Tizen Studio por defecto — vale para emulador, pero para instalarlo en la TV real de forma consistente conviene crear tu propio perfil de autor en `Certificate Manager` (cuenta Samsung → `Create` → author certificate) y volver a empaquetar pasándole el perfil:
+
+```bat
+C:\tizen-studio\tools\ide\bin\tizen package -t wgt -s NOMBRE_DE_TU_PERFIL
+```
+
+> Tip: añade `C:\tizen-studio\tools\ide\bin` a tu `PATH` de Windows para no tener que escribir la ruta completa cada vez.
+
+### Conectar con la TV e instalar
+
+```bat
+C:\tizen-studio\tools\ide\bin\sdb connect IP_DE_LA_TV
+```
+
+Por ejemplo:
+
+```bat
+C:\tizen-studio\tools\ide\bin\sdb connect 192.168.1.120
+```
+
+Comprueba que aparece en la lista de dispositivos:
+
+```bat
+C:\tizen-studio\tools\ide\bin\sdb devices
+```
+
+Y, cuando la TV aparezca ahí, instala el `.wgt` generado:
+
+```bat
+C:\tizen-studio\tools\ide\bin\tizen install -n YFitops.wgt
+```
+
+La app queda instalada y lista para abrirse desde el menú **Apps** de la TV. Para reinstalar tras cambios, repite: `npm run build` → `tizen package -t wgt` → `tizen install -n YFitops.wgt` (no hace falta reconectar con `sdb` si la conexión sigue activa).
+
+### Piezas clave
+
+| Archivo/carpeta | Función |
+|---|---|
+| `config.xml` | Manifiesto Tizen: id de la app (10 caracteres del certificado + nombre), versión, `required_version` (4.0 para TVs de 2018), permisos de red (`<access origin="*" .../>`) y ajustes de pantalla completa. |
+| `webpack.config.js` | Igual que en `yfitopspc/` pero con `target: 'web'` (no `electron-renderer`) y copiando `config.xml` + `icon.png` a `dist/` para dejarlo listo como proyecto Tizen. |
+| `src/tv/tvBridge.js` | Sustituye `window.electronAPI`: sesión y foto de perfil en `localStorage` en vez de archivos en disco. |
+| `src/tv/tvNavigation.js` | Navegación espacial por mando (flechas → foco más cercano en esa dirección), atajo `focusableProps()` para convertir `<div onClick>` en algo enfocable, y enganche de las teclas multimedia del mando. |
+| `src/tv/backStack.js` | Pila de "capas" (modales/vistas) que se registran con `useTvBack(onClose)`; la tecla Atrás cierra siempre la de más arriba, o sale de la app si no hay ninguna abierta. |
+| `src/store/MusicStore.js` | Igual que en PC pero sin las llamadas a Discord RPC y sin la rama de reproducción desde archivo local descargado (aquí siempre se hace streaming desde el servidor). |
+| `src/store/SettingsStore.js` | Igual que en PC pero sin `launchOnStartup`, sin caché ni descargas offline (`downloadPlaylist`, `clearCache`, etc. no existen). |
+
+### Notas de la app de TV
+
+- El `id`/`package` de `tizen:application` en `config.xml` viene con un placeholder de 10 caracteres; hay que sustituirlo por el que te asigne tu propio certificado de autor antes de firmar para un uso más allá de pruebas puntuales.
+- La foto de perfil vive en el `localStorage` del navegador Tizen de esa TV en concreto (no en un archivo ni en el servidor); si restauras la TV a fábrica, se pierde igual que se perdería la sesión.
 
 ---
 
@@ -698,6 +796,16 @@ El servidor registra automáticamente por usuario:
 
 ---
 
+# Aplicación de Samsung TV (`yfitops-samsungtv`)
+
+| Script | Descripción |
+| --- | --- |
+| `npm run build` | Compila el renderer (React) a `dist/`, dejando ahí un proyecto Tizen completo (junto a `config.xml` e `icon.png`). |
+
+Empaquetado e instalación en la TV: no son scripts de `npm`, se hacen con la CLI de Tizen Studio (`tizen package`, `sdb connect`, `tizen install`) — ver la sección [App de Samsung TV (Tizen)](#app-de-samsung-tv-tizen).
+
+---
+
 # Aplicación móvil (`yfitops-android`)
 
 | Script | Descripción |
@@ -731,10 +839,17 @@ npm run validate    # Validar configuración
 # Forzar sincronización manual
 POST /api/sync
 ```
+
+**La app de Samsung TV no conecta por `sdb`**
+
+- Comprueba que la TV está en **modo desarrollador** (Apps → `12345` → Developer mode → ON) y que tiene configurada la IP de tu PC.
+- Verifica que el PC y la TV están en la misma red/VLAN (algunos routers aíslan la red de invitados).
+- Si `sdb devices` no muestra la TV tras `sdb connect IP_DE_LA_TV`, reinicia la TV y vuelve a intentarlo; a veces el demonio `sdb` del propio Tizen Studio también ayuda reiniciarlo con `sdb kill-server && sdb start-server`.
+
 ---
 
 ## Licencia
 
 Privada — YFitops 2026
 
-*Última actualización: 6 de julio de 2026*
+*Última actualización: 8 de julio de 2026*
