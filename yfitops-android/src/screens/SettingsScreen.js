@@ -121,7 +121,7 @@ export default function SettingsScreen({ onLogout }) {
   };
 
   const totalOfflineCount = offlinePlaylists.length;
-  const appVersion = Constants.expoConfig?.version || '1.2.0';
+  const appVersion = Constants.expoConfig?.version || '—';
 
   const INDEX = [
     { id: 'profile', icon: '👤', label: t('settings.index.profile') },

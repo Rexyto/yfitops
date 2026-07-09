@@ -162,14 +162,14 @@ export function SettingsProvider({ children }) {
         if (!already) {
           try {
             const ext = (song.url?.split('.').pop() || 'mp3').split('?')[0];
-            await File.downloadFileAsync(song._fullUrl, downloadsDir, { idempotent: true });
-            // Renombra al patrón <songId>.<ext> para poder localizarlo luego
-            const downloadedName = song._fullUrl.split('/').pop().split('?')[0];
-            const downloadedFile = new File(downloadsDir, downloadedName);
-            if (downloadedFile.exists) {
-              const target = new File(downloadsDir, `${song.id}.${ext}`);
-              if (downloadedFile.uri !== target.uri) downloadedFile.move(target);
-            }
+            const target = new File(downloadsDir, `${song.id}.${ext}`);
+            // Descargamos directamente con el nombre final (<songId>.<ext>) en vez
+            // de dejar que expo-file-system elija el nombre (lo saca de las
+            // cabeceras de la respuesta del servidor, que no siempre coincide con
+            // la URL) y luego intentar adivinarlo para renombrarlo — eso fallaba
+            // en silencio y dejaba el archivo real con un nombre que nunca
+            // volvíamos a encontrar.
+            await File.downloadFileAsync(song._fullUrl, target, { idempotent: true });
           } catch (e) {
             console.log('download error:', song.id, e.message);
           }

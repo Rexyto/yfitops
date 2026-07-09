@@ -2,11 +2,32 @@ import React, { createContext, useState, useEffect, useRef } from 'react';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import * as Notifications from 'expo-notifications';
 import { Platform, AppState } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSettings } from './SettingsContext';
 
 export const MusicContext = createContext();
 
 const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || 'https://yfitops.duckdns.org';
+
+// Caché en disco de la última respuesta buena del servidor. Sin esto, si
+// abres la app sin conexión, la biblioteca/colecciones aparecen vacías
+// aunque tengas canciones descargadas para escuchar sin conexión: la
+// pantalla de canciones/colecciones/favoritos lee de este estado, no
+// directamente de lo descargado.
+const CACHE_SONGS = 'yfitops_cache_songs';
+const CACHE_PLAYLISTS = 'yfitops_cache_playlists';
+const CACHE_FOLDER_PLAYLISTS = 'yfitops_cache_folder_playlists';
+const CACHE_FAVORITES = 'yfitops_cache_favorites';
+
+async function readCache(key, fallback) {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch { return fallback; }
+}
+async function writeCache(key, value) {
+  try { await AsyncStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -301,6 +322,21 @@ export const MusicProvider = ({ children, token, onLogout }) => {
       else if (action === 'toggle') { if (isPlayingRef.current) pauseSong(); else resumeSong(); }
     });
 
+    // Primero pintamos lo último que sabíamos (funciona sin conexión),
+    // y luego intentamos refrescar desde el servidor si hay red.
+    (async () => {
+      const [cachedSongs, cachedFavorites, cachedPlaylists, cachedFolders] = await Promise.all([
+        readCache(CACHE_SONGS, []),
+        readCache(CACHE_FAVORITES, []),
+        readCache(CACHE_PLAYLISTS, []),
+        readCache(CACHE_FOLDER_PLAYLISTS, []),
+      ]);
+      setSongs(cachedSongs);
+      setFavorites(cachedFavorites);
+      setPlaylists(cachedPlaylists);
+      setFolderPlaylists(cachedFolders);
+    })();
+
     loadFavorites(); loadPlaylists(); fetchSongs(); fetchFolderPlaylists();
 
     const syncInterval = setInterval(() => {
@@ -351,19 +387,40 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   }, []);
 
   const fetchSongs = async () => {
-    try { const r = await fetch(`${SERVER_URL}/api/songs`, { headers: authHeaders() }); setSongs(await r.json()); } catch {}
+    try {
+      const r = await fetch(`${SERVER_URL}/api/songs`, { headers: authHeaders() });
+      const d = await r.json();
+      setSongs(d);
+      writeCache(CACHE_SONGS, d);
+    } catch {}
   };
   const loadFavorites = async () => {
-    try { const r = await fetch(`${SERVER_URL}/api/favorites`, { headers: authHeaders() }); setFavorites(await r.json()); } catch {}
+    try {
+      const r = await fetch(`${SERVER_URL}/api/favorites`, { headers: authHeaders() });
+      const d = await r.json();
+      setFavorites(d);
+      writeCache(CACHE_FAVORITES, d);
+    } catch {}
   };
   const loadPlaylists = async () => {
-    try { const r = await fetch(`${SERVER_URL}/api/playlists`, { headers: authHeaders() }); setPlaylists(await r.json()); } catch {}
+    try {
+      const r = await fetch(`${SERVER_URL}/api/playlists`, { headers: authHeaders() });
+      const d = await r.json();
+      setPlaylists(d);
+      writeCache(CACHE_PLAYLISTS, d);
+    } catch {}
   };
   const fetchListeners = async () => {
     try { const r = await fetch(`${SERVER_URL}/api/listeners`, { headers: authHeaders() }); const d = await r.json(); setActiveListeners(d.count || 0); } catch {}
   };
   const fetchFolderPlaylists = async () => {
-    try { const r = await fetch(`${SERVER_URL}/api/folderplaylists`, { headers: authHeaders() }); const d = await r.json(); setFolderPlaylists(Array.isArray(d) ? d : []); } catch {}
+    try {
+      const r = await fetch(`${SERVER_URL}/api/folderplaylists`, { headers: authHeaders() });
+      const d = await r.json();
+      const arr = Array.isArray(d) ? d : [];
+      setFolderPlaylists(arr);
+      writeCache(CACHE_FOLDER_PLAYLISTS, arr);
+    } catch {}
   };
 
   const playSong = async (song, playlist = []) => {

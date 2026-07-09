@@ -49,14 +49,23 @@ function AppInner() {
       try {
         const saved = await AsyncStorage.getItem('auth_token');
         if (saved) {
-          const res = await fetch(`${SERVER_URL}/api/verify`, {
-            headers: { 'Authorization': `Bearer ${saved}` },
-          });
-          if (res.ok) {
+          try {
+            const res = await fetch(`${SERVER_URL}/api/verify`, {
+              headers: { 'Authorization': `Bearer ${saved}` },
+            });
+            if (res.ok) {
+              setToken(saved);
+              checkVersions(saved);
+            } else {
+              // El servidor respondió explícitamente que el token no vale
+              await AsyncStorage.removeItem('auth_token');
+            }
+          } catch {
+            // No hay red para comprobar el token (sin wifi/datos): lo aceptamos
+            // igualmente para poder seguir escuchando lo descargado sin conexión.
+            // Si el token fuera inválido de verdad, las llamadas normales de la
+            // app irán fallando igual, pero al menos no te deja fuera del todo.
             setToken(saved);
-            checkVersions(saved);
-          } else {
-            await AsyncStorage.removeItem('auth_token');
           }
         }
       } catch {}
