@@ -815,17 +815,53 @@ El servidor registra automáticamente por usuario:
 
 ## Scripts disponibles
 
+> **Importante:** Todos los comandos deben ejecutarse desde la carpeta de la aplicación correspondiente, **no desde la raíz del proyecto**.
+
+# Servidor (`yfitops-server`)
+
 | Script | Descripción |
-|---|---|
-| `npm start` | Inicia el servidor en modo producción |
-| `npm run dev` | Desarrollo con nodemon (reinicio automático) |
-| `npm run validate` | Valida la configuración del entorno |
-| `npm run web:install` | Instala dependencias del panel web |
-| `npm run web:dev` | Panel web en modo desarrollo con hot-reload |
-| `npm run web:build` | Build del panel web para producción |
-| `npm run dist:linux` | Build de los archivos de instalación para linux |
-| `npm run dist:all` | Build tanto de los archivos linux como windows |
-| `npm run dist`  | Build para crear el .exe |
+| --- | --- |
+| `npm start` | Inicia el servidor. |
+| `npm run dev` | Inicia el servidor en modo desarrollo. |
+| `npm run migrate` | Ejecuta la migración de datos a MySQL. |
+| `npm run final-fix` | Ejecuta el script de corrección final de la base de datos. |
+| `npm run web:install` | Instala las dependencias del panel web. |
+| `npm run web:dev` | Inicia el panel web en modo desarrollo. |
+| `npm run web:build` | Genera la versión de producción del panel web. |
+
+---
+
+# Aplicación de escritorio (`yfitops-pc`)
+
+| Script | Descripción |
+| --- | --- |
+| `npm start` | Compila la aplicación en modo desarrollo y la inicia con Electron. |
+| `npm run watch` | Inicia la aplicación en modo desarrollo con recompilación automática (Webpack Watch). |
+| `npm run build` | Genera la compilación de producción. |
+| `npm run dist` | Genera el instalador de Windows (`.exe`). |
+| `npm run dist:linux` | Genera los instaladores para Linux (`AppImage` y `.deb`). |
+| `npm run dist:all` | Genera los instaladores para Windows y Linux. |
+
+---
+
+# Aplicación de Samsung TV (`yfitops-samsungtv`)
+
+| Script | Descripción |
+| --- | --- |
+| `npm run build` | Compila el renderer (React) a `dist/`, dejando ahí un proyecto Tizen completo (junto a `config.xml` e `icon.png`). |
+
+Empaquetado e instalación en la TV: no son scripts de `npm`, se hacen con la CLI de Tizen Studio (`tizen package`, `sdb connect`, `tizen install`) — ver la sección [App de Samsung TV (Tizen)](#app-de-samsung-tv-tizen).
+
+---
+
+# Aplicación móvil (`yfitops-android`)
+
+| Script | Descripción |
+| --- | --- |
+| `npm start` | Inicia el proyecto con Expo (Metro Bundler). |
+| `npm run android` | Compila e inicia la aplicación en un emulador o dispositivo Android conectado. |
+| `npm run ios` | Compila e inicia la aplicación en un simulador o dispositivo iOS conectado. |
+| `npm run web` | Inicia la aplicación en modo web mediante Expo. |
 
 ---
 
