@@ -1,6 +1,6 @@
 # YFitops
 
-> Ecosistema multiplataforma de música: servidor backend, app de escritorio para Windows y Linux, app móvil para Android, panel web administrativo y bots.
+> Ecosistema multiplataforma de música: servidor backend, app de escritorio para Windows y Linux, app móvil para Android, para televisores Samsung Smart TV, panel web administrativo y bots.
 
 ---
 
