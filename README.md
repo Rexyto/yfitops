@@ -16,6 +16,7 @@
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Carpeta data/](#carpeta-data)
 - [App de escritorio (Windows y Linux)](#app-de-escritorio-windows-y-linux)
+- [App de Samsung TV Tizen](#app-de-samsung-tv-tizen)
 - [App móvil (Android)](#app-móvil-android)
 - [APIs](#apis)
 - [Seguridad](#seguridad)
