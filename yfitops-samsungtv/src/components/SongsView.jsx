@@ -150,7 +150,7 @@ export default function SongsView() {
                 onClick={e => { e.stopPropagation(); toggleFavorite(song.id); }}
                 title={t('songs.favorite')}
               >
-                <span style={{ color: isFav ? '#1ed760' : 'var(--text-dim)', fontSize: 16 }}>
+                <span style={{ color: isFav ? '#1ed760' : 'var(--text-dim)', fontSize: 21 }}>
                   {isFav ? '♥' : '♡'}
                 </span>
               </button>
@@ -160,7 +160,7 @@ export default function SongsView() {
 
         {filtered.length === 0 && (
           <div style={styles.empty}>
-            <span style={{ fontSize: 48 }}>🎵</span>
+            <span style={{ fontSize: 60 }}>🎵</span>
             <p style={styles.emptyTitle}>{t('songs.empty')}</p>
             <p style={styles.emptySub}>{t('songs.emptyHint')}</p>
           </div>
@@ -177,7 +177,7 @@ export default function SongsView() {
             <label style={styles.coverEditBtn} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.querySelector('input')?.click(); }}>
               {editSong.coverUrl
                 ? <img src={`${SERVER_URL}${editSong.coverUrl}`} style={styles.coverPreview} alt="" />
-                : <div style={{ ...styles.coverPreview, background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>♪</div>
+                : <div style={{ ...styles.coverPreview, background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>♪</div>
               }
               <div style={styles.coverOverlay}>{t('songs.changeCover')}</div>
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCoverChange} />
@@ -207,90 +207,90 @@ export default function SongsView() {
 }
 
 const styles = {
-  container: { padding: '0 0 20px 0' },
-  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '28px 28px 16px' },
-  title: { fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5, margin: 0 },
-  sub: { fontSize: 12, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
-  headerRight: { display: 'flex', alignItems: 'center', gap: 10 },
+  container: { padding: '0 0 24px 0' },
+  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '36px 36px 20px' },
+  title: { fontSize: 38, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5, margin: 0 },
+  sub: { fontSize: 15, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
+  headerRight: { display: 'flex', alignItems: 'center', gap: 14 },
   listenersTag: {
     background: '#1ed76015', border: '1px solid #1ed76030',
-    borderRadius: 20, padding: '6px 12px',
-    color: '#1ed760', fontSize: 13, fontWeight: 700,
+    borderRadius: 24, padding: '9px 16px',
+    color: '#1ed760', fontSize: 16, fontWeight: 700,
   },
   syncBtn: {
-    display: 'flex', alignItems: 'center', gap: 6,
+    display: 'flex', alignItems: 'center', gap: 8,
     background: 'var(--bg3)', border: '1px solid var(--border-strong)',
-    borderRadius: 20, padding: '8px 14px',
-    color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    borderRadius: 24, padding: '11px 18px',
+    color: 'var(--text-muted)', fontSize: 16, fontWeight: 600, cursor: 'pointer',
   },
   searchBox: {
     display: 'flex', alignItems: 'center',
-    background: 'var(--bg3)', borderRadius: 10,
-    margin: '0 28px 12px', padding: '0 14px',
+    background: 'var(--bg3)', borderRadius: 12,
+    margin: '0 36px 16px', padding: '0 18px',
     border: '1px solid var(--border-strong)',
   },
-  searchIcon: { fontSize: 14, marginRight: 10, flexShrink: 0 },
+  searchIcon: { fontSize: 18, marginRight: 12, flexShrink: 0 },
   searchInput: {
     flex: 1, background: 'none', border: 'none', outline: 'none',
-    color: 'var(--text)', fontSize: 15, padding: '12px 0',
+    color: 'var(--text)', fontSize: 18, padding: '16px 0',
   },
-  clearBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 16 },
-  list: { paddingBottom: 20 },
+  clearBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 19 },
+  list: { paddingBottom: 24 },
   row: {
     display: 'flex', alignItems: 'center',
-    padding: '9px 20px', margin: '1px 8px',
-    borderRadius: 8, cursor: 'pointer',
+    padding: '14px 28px', margin: '2px 12px',
+    borderRadius: 12, cursor: 'pointer',
     transition: 'background 0.1s',
   },
   rowActive: { background: 'var(--bg3)' },
-  idx: { width: 28, color: 'var(--text-dim)', fontSize: 13, textAlign: 'center', fontWeight: 600, flexShrink: 0 },
-  cover: { width: 44, height: 44, borderRadius: 6, marginRight: 12, objectFit: 'cover', flexShrink: 0 },
+  idx: { width: 40, color: 'var(--text-dim)', fontSize: 16, textAlign: 'center', fontWeight: 600, flexShrink: 0 },
+  cover: { width: 60, height: 60, borderRadius: 8, marginRight: 16, objectFit: 'cover', flexShrink: 0 },
   coverEmpty: {
-    width: 44, height: 44, borderRadius: 6, marginRight: 12,
+    width: 60, height: 60, borderRadius: 8, marginRight: 16,
     background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 18, flexShrink: 0,
+    fontSize: 22, flexShrink: 0,
   },
-  meta: { flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 },
-  titleRow: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 },
-  songTitle: { color: 'var(--text-secondary)', fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  songArtist: { color: 'var(--text-dim)', fontSize: 12 },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: '6px 8px', color: 'var(--text-dim)', fontSize: 16 },
-  empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 80, gap: 10 },
-  emptyTitle: { color: 'var(--text)', fontSize: 20, fontWeight: 700, margin: 0 },
-  emptySub: { color: 'var(--text-dim)', fontSize: 14, margin: 0 },
+  meta: { flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 },
+  titleRow: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
+  songTitle: { color: 'var(--text-secondary)', fontSize: 18, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  songArtist: { color: 'var(--text-dim)', fontSize: 15 },
+  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: '10px 12px', color: 'var(--text-dim)', fontSize: 20 },
+  empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 100, gap: 12 },
+  emptyTitle: { color: 'var(--text)', fontSize: 24, fontWeight: 700, margin: 0 },
+  emptySub: { color: 'var(--text-dim)', fontSize: 17, margin: 0 },
   // Modal
   overlay: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
   },
   modal: {
-    background: 'var(--bg2)', borderRadius: 20,
-    padding: 28, width: 380, display: 'flex', flexDirection: 'column', gap: 12,
+    background: 'var(--bg2)', borderRadius: 24,
+    padding: 36, width: 460, display: 'flex', flexDirection: 'column', gap: 16,
     border: '1px solid var(--border)',
   },
-  modalTitle: { color: 'var(--text)', fontSize: 20, fontWeight: 800, margin: 0, textAlign: 'center' },
+  modalTitle: { color: 'var(--text)', fontSize: 24, fontWeight: 800, margin: 0, textAlign: 'center' },
   coverEditBtn: {
     alignSelf: 'center', position: 'relative',
-    cursor: 'pointer', borderRadius: 12, overflow: 'hidden',
+    cursor: 'pointer', borderRadius: 14, overflow: 'hidden',
   },
-  coverPreview: { width: 100, height: 100, borderRadius: 12, display: 'block', objectFit: 'cover' },
+  coverPreview: { width: 128, height: 128, borderRadius: 14, display: 'block', objectFit: 'cover' },
   coverOverlay: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    background: 'rgba(0,0,0,0.6)', padding: '5px 0',
-    textAlign: 'center', color: '#ffffff', fontSize: 11, fontWeight: 700,
+    background: 'rgba(0,0,0,0.6)', padding: '7px 0',
+    textAlign: 'center', color: '#ffffff', fontSize: 13, fontWeight: 700,
   },
   input: {
     background: 'var(--bg4)', border: '1px solid var(--border-strong)',
-    borderRadius: 10, padding: 14, color: 'var(--text)', fontSize: 15,
+    borderRadius: 12, padding: 18, color: 'var(--text)', fontSize: 18,
     outline: 'none', width: '100%', boxSizing: 'border-box',
   },
-  modalActions: { display: 'flex', gap: 10, marginTop: 4 },
+  modalActions: { display: 'flex', gap: 14, marginTop: 6 },
   cancelBtn: {
     flex: 1, background: 'var(--bg4)', border: 'none',
-    borderRadius: 10, padding: 14, color: 'var(--text-muted)', fontWeight: 600, cursor: 'pointer',
+    borderRadius: 12, padding: 18, color: 'var(--text-muted)', fontWeight: 600, cursor: 'pointer', fontSize: 16,
   },
   saveBtn: {
     flex: 1, background: '#1ed760', border: 'none',
-    borderRadius: 10, padding: 14, color: '#000', fontWeight: 800, cursor: 'pointer',
+    borderRadius: 12, padding: 18, color: '#000', fontWeight: 800, cursor: 'pointer', fontSize: 16,
   },
 };

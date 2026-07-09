@@ -35,7 +35,7 @@ const tvBridge = {
   },
 
   // ── Versión de la app (fija, no hay proceso Electron que la reporte) ──
-  getAppVersion: async () => '1.0.0',
+  getAppVersion: async () => '1.2.0',
 
   // ── Foto de perfil (localStorage en vez de archivo binario) ──────────
   saveProfilePicture: async (dataUrl) => {

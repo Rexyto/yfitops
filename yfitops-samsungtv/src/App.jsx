@@ -14,8 +14,8 @@ import SettingsView from './components/SettingsView';
 import PlayerBar from './components/PlayerBar';
 
 // La versión de la app de TV es fija: aquí no hay proceso Electron que la
-// reporte (viene de package.json / config.xml, ambos en 1.0.0).
-const APP_VERSION = '1.0.0';
+// reporte (viene de package.json / config.xml, ambos en 1.2.0).
+const APP_VERSION = '1.2.0';
 
 // Aviso de "sin conexión" — aparece y desaparece solo, sin recargar nada
 function OfflineBanner() {
@@ -28,7 +28,7 @@ function OfflineBanner() {
 }
 
 export default function App() {
-  const { token, login, currentSong } = useMusicStore();
+  const { token, currentSong } = useMusicStore();
   const { isOnline } = useSettingsStore();
   const t = useT();
   const [tab, setTab] = useState('songs');
@@ -108,7 +108,7 @@ export default function App() {
   if (checking) {
     return (
       <div style={{ width: '100vw', height: '100vh', background: 'var(--bg0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>{t('app.loading')}</span>
+        <span style={{ color: 'var(--text-dim)', fontSize: 22 }}>{t('app.loading')}</span>
       </div>
     );
   }
@@ -135,7 +135,7 @@ export default function App() {
       <div style={styles.body}>
         <Sidebar tab={tab} setTab={setTab} />
         <div style={styles.main}>
-          <div style={{ ...styles.content, paddingBottom: currentSong ? 96 : 0 }}>
+          <div style={{ ...styles.content, paddingBottom: currentSong ? 128 : 0 }}>
             {renderView()}
           </div>
           {currentSong && <PlayerBar />}
@@ -169,9 +169,9 @@ const styles = {
     background: 'var(--bg0)', overflow: 'hidden',
   },
   offlineBanner: {
-    flexShrink: 0, padding: '8px 20px',
+    flexShrink: 0, padding: '12px 26px',
     background: '#ff555518', borderBottom: '1px solid #ff555540',
-    color: '#ff8080', fontSize: 12.5, fontWeight: 700, textAlign: 'center',
+    color: '#ff8080', fontSize: 16, fontWeight: 700, textAlign: 'center',
   },
   body: {
     flex: 1, display: 'flex', overflow: 'hidden',
@@ -188,19 +188,19 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999,
   },
   modalBox: {
-    width: 520, maxWidth: '90%', background: 'var(--bg2)', border: '1px solid var(--border-strong)', borderRadius: 18,
-    padding: 28, boxShadow: '0 24px 60px rgba(0,0,0,0.45)', color: 'var(--text)',
+    width: 680, maxWidth: '90%', background: 'var(--bg2)', border: '1px solid var(--border-strong)', borderRadius: 24,
+    padding: 38, boxShadow: '0 24px 60px rgba(0,0,0,0.45)', color: 'var(--text)',
   },
-  modalTitle: { margin: 0, fontSize: 22, color: 'var(--text)' },
-  modalText: { marginTop: 16, lineHeight: 1.6, color: 'var(--text-secondary)', fontSize: 14 },
+  modalTitle: { margin: 0, fontSize: 28, color: 'var(--text)' },
+  modalText: { marginTop: 20, lineHeight: 1.6, color: 'var(--text-secondary)', fontSize: 18 },
   primaryBtn: {
-    marginTop: 20,
-    background: '#1ed760', color: '#000', border: 'none', borderRadius: 10,
-    padding: '12px 18px', cursor: 'pointer', fontWeight: 700, minWidth: 180,
+    marginTop: 26,
+    background: '#1ed760', color: '#000', border: 'none', borderRadius: 12,
+    padding: '16px 24px', cursor: 'pointer', fontWeight: 700, minWidth: 220, fontSize: 17,
   },
   changelogContent: {
-    marginTop: 18, padding: 16, background: 'var(--bg3)', borderRadius: 12, border: '1px solid var(--border)', maxHeight: 320,
-    overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: 13, color: 'var(--text-secondary)',
+    marginTop: 22, padding: 20, background: 'var(--bg3)', borderRadius: 14, border: '1px solid var(--border)', maxHeight: 380,
+    overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: 16, color: 'var(--text-secondary)',
   },
-  changelogLine: { margin: '8px 0' },
+  changelogLine: { margin: '10px 0' },
 };

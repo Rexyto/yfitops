@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import useSettingsStore from '../store/SettingsStore';
+import useSettingsStore, { THEMES } from '../store/SettingsStore';
 import { useT } from '../i18n';
 import LogsModal from './LogsModal';
 
@@ -18,7 +18,7 @@ const Section = React.forwardRef(function Section({ title, subtitle, children },
 
 export default function SettingsView({ appVersion }) {
   const {
-    theme, toggleTheme, language, setLanguage,
+    theme, setTheme, language, setLanguage,
     profilePicture, uploadProfilePicture, removeProfilePicture,
     isOnline,
   } = useSettingsStore();
@@ -122,19 +122,37 @@ export default function SettingsView({ appVersion }) {
             title={t('settings.appearance.title')}
             subtitle={t('settings.appearance.subtitle')}
           >
-            <div style={styles.toggleRow}>
+            <div style={styles.themeBlock}>
               <div>
-                <span style={styles.toggleLabel}>{t('settings.appearance.themeLabel', theme)}</span>
+                <span style={styles.toggleLabel}>{t('settings.appearance.themeLabel', t(`theme.${theme}`))}</span>
                 <p style={styles.toggleHint}>{t('settings.appearance.themeHint')}</p>
               </div>
-              <button
-                style={{ ...styles.switch, ...(theme === 'light' ? styles.switchOn : {}) }}
-                onClick={toggleTheme}
-                role="switch"
-                aria-checked={theme === 'light'}
-              >
-                <span style={{ ...styles.switchDot, ...(theme === 'light' ? styles.switchDotOn : {}) }} />
-              </button>
+              <div style={styles.themePicker}>
+                {THEMES.map(themeDef => {
+                  const isActive = theme === themeDef.id;
+                  return (
+                    <button
+                      key={themeDef.id}
+                      style={styles.themeSwatchBtn}
+                      onClick={() => setTheme(themeDef.id)}
+                      title={t(`theme.${themeDef.id}`)}
+                      aria-label={t(`theme.${themeDef.id}`)}
+                      aria-pressed={isActive}
+                    >
+                      <span
+                        style={{
+                          ...styles.themeSwatch,
+                          background: `linear-gradient(135deg, ${themeDef.swatch[0]} 50%, ${themeDef.swatch[1]} 50%)`,
+                          ...(isActive ? styles.themeSwatchActive : {}),
+                        }}
+                      >
+                        {isActive && <span style={styles.themeSwatchCheck}>✓</span>}
+                      </span>
+                      <span style={styles.themeSwatchLabel}>{t(`theme.${themeDef.id}`)}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div style={styles.toggleRow}>
@@ -175,7 +193,7 @@ export default function SettingsView({ appVersion }) {
 
           {/* Versión */}
           <Section ref={el => (sectionRefs.current.version = el)} title={t('settings.version.title')}>
-            <span style={styles.versionTag}>YFitops TV v{appVersion || '1.0.0'}</span>
+            <span style={styles.versionTag}>YFitops TV v{appVersion || '1.2.0'}</span>
           </Section>
         </div>
       </div>
@@ -186,81 +204,97 @@ export default function SettingsView({ appVersion }) {
 }
 
 const styles = {
-  container: { padding: '0 0 40px 0' },
-  header: { padding: '28px 28px 8px' },
-  title: { fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5, margin: '0 0 4px' },
-  sub: { fontSize: 12, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
+  container: { padding: '0 0 48px 0' },
+  header: { padding: '36px 36px 10px' },
+  title: { fontSize: 38, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5, margin: '0 0 6px' },
+  sub: { fontSize: 15, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
 
   offlineNotice: {
-    margin: '4px 24px 8px', padding: '12px 16px',
-    background: '#ff555515', border: '1px solid #ff555540', borderRadius: 10,
-    color: '#ff8080', fontSize: 13, fontWeight: 600, lineHeight: 1.5,
+    margin: '6px 32px 10px', padding: '16px 20px',
+    background: '#ff555515', border: '1px solid #ff555540', borderRadius: 12,
+    color: '#ff8080', fontSize: 16, fontWeight: 600, lineHeight: 1.5,
   },
 
-  layout: { display: 'flex', alignItems: 'flex-start', gap: 8, padding: '0 24px' },
+  layout: { display: 'flex', alignItems: 'flex-start', gap: 16, padding: '0 32px' },
   indexNav: {
-    width: 176, flexShrink: 0, position: 'sticky', top: 0,
-    display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 4,
+    width: 260, flexShrink: 0, position: 'sticky', top: 0,
+    display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 4,
   },
   indexItem: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    background: 'none', border: 'none', borderRadius: 8,
-    padding: '9px 10px', cursor: 'pointer',
-    color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, textAlign: 'left',
+    display: 'flex', alignItems: 'center', gap: 14,
+    background: 'none', border: 'none', borderRadius: 12,
+    padding: '16px 16px', cursor: 'pointer',
+    color: 'var(--text-muted)', fontSize: 17, fontWeight: 600, textAlign: 'left',
   },
-  indexIcon: { fontSize: 14, width: 18, textAlign: 'center', flexShrink: 0 },
+  indexIcon: { fontSize: 19, width: 24, textAlign: 'center', flexShrink: 0 },
 
   sectionsCol: { flex: 1, minWidth: 0 },
-  section: { margin: '0 0 14px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, padding: 20, scrollMarginTop: 12 },
-  sectionHead: { marginBottom: 14 },
-  sectionTitle: { color: 'var(--text)', fontSize: 15, fontWeight: 800, margin: 0 },
-  sectionSubtitle: { color: 'var(--text-dim)', fontSize: 12, display: 'block', marginTop: 4 },
-  sectionBody: { display: 'flex', flexDirection: 'column', gap: 12 },
+  section: { margin: '0 0 20px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 18, padding: 28, scrollMarginTop: 16 },
+  sectionHead: { marginBottom: 20 },
+  sectionTitle: { color: 'var(--text)', fontSize: 20, fontWeight: 800, margin: 0 },
+  sectionSubtitle: { color: 'var(--text-dim)', fontSize: 15, display: 'block', marginTop: 6 },
+  sectionBody: { display: 'flex', flexDirection: 'column', gap: 18 },
 
-  profileRow: { display: 'flex', alignItems: 'center', gap: 20 },
-  avatarWrap: { width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: '2px solid #1ed76055' },
+  profileRow: { display: 'flex', alignItems: 'center', gap: 26 },
+  avatarWrap: { width: 100, height: 100, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: '3px solid #1ed76055' },
   avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  avatarEmpty: { width: '100%', height: '100%', background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: 'var(--text-faint)' },
-  profileActions: { display: 'flex', gap: 10, flexWrap: 'wrap' },
-  errorText: { color: '#ff5555', fontSize: 13, margin: 0 },
+  avatarEmpty: { width: '100%', height: '100%', background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38, color: 'var(--text-faint)' },
+  profileActions: { display: 'flex', gap: 14, flexWrap: 'wrap' },
+  errorText: { color: '#ff5555', fontSize: 16, margin: 0 },
 
   primaryBtn: {
-    background: '#1ed760', border: 'none', borderRadius: 10,
-    padding: '10px 16px', color: '#000', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+    background: '#1ed760', border: 'none', borderRadius: 12,
+    padding: '15px 22px', color: '#000', fontWeight: 800, fontSize: 16, cursor: 'pointer',
   },
   secondaryBtn: {
-    background: 'var(--bg3)', border: '1px solid var(--border-strong)', borderRadius: 10,
-    padding: '10px 16px', color: 'var(--text)', fontWeight: 700, fontSize: 13, cursor: 'pointer',
+    background: 'var(--bg3)', border: '1px solid var(--border-strong)', borderRadius: 12,
+    padding: '15px 22px', color: 'var(--text)', fontWeight: 700, fontSize: 16, cursor: 'pointer',
   },
 
-  toggleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  toggleLabel: { color: 'var(--text)', fontSize: 14, fontWeight: 700 },
-  toggleHint: { color: 'var(--text-dim)', fontSize: 12, margin: '2px 0 0' },
-  switch: {
-    width: 46, height: 26, borderRadius: 20, background: 'var(--bg4)', border: '1px solid var(--border-strong)',
-    position: 'relative', cursor: 'pointer', flexShrink: 0, padding: 0,
-  },
-  switchOn: { background: '#1ed76040', borderColor: '#1ed76070' },
-  switchDot: {
-    position: 'absolute', top: 2, left: 2, width: 20, height: 20, borderRadius: '50%',
-    background: '#fff', transition: 'transform 0.15s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-  },
-  switchDotOn: { transform: 'translateX(20px)', background: '#1ed760' },
+  toggleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20 },
+  toggleLabel: { color: 'var(--text)', fontSize: 18, fontWeight: 700 },
+  toggleHint: { color: 'var(--text-dim)', fontSize: 14, margin: '4px 0 0' },
   select: {
-    background: 'var(--bg3)', border: '1px solid var(--border-strong)', borderRadius: 8,
-    padding: '8px 12px', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer',
+    background: 'var(--bg3)', border: '1px solid var(--border-strong)', borderRadius: 10,
+    padding: '12px 16px', color: 'var(--text-secondary)', fontSize: 16, cursor: 'pointer',
   },
 
-  creditsText: { color: 'var(--text-secondary)', fontSize: 14, margin: 0, lineHeight: 1.6 },
-  creditsLinks: { display: 'flex', gap: 10, flexWrap: 'wrap' },
+  themeBlock: { display: 'flex', flexDirection: 'column', gap: 16 },
+  themePicker: { display: 'flex', flexWrap: 'wrap', gap: 22, paddingTop: 4 },
+  themeSwatchBtn: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+    background: 'none', border: 'none', cursor: 'pointer', padding: 4, width: 84,
+  },
+  themeSwatch: {
+    width: 58, height: 58, borderRadius: '50%', display: 'flex',
+    alignItems: 'center', justifyContent: 'center',
+    border: '3px solid var(--border-strong)', boxSizing: 'border-box',
+    transition: 'transform 0.12s, border-color 0.12s, box-shadow 0.12s',
+  },
+  themeSwatchActive: {
+    border: '3px solid #1ed760',
+    boxShadow: '0 0 0 4px #1ed76030',
+    transform: 'scale(1.06)',
+  },
+  themeSwatchCheck: {
+    color: '#1ed760', fontSize: 22, fontWeight: 900,
+    textShadow: '0 1px 3px rgba(0,0,0,0.6), 0 0 4px rgba(255,255,255,0.5)',
+  },
+  themeSwatchLabel: {
+    color: 'var(--text-dim)', fontSize: 13.5, fontWeight: 700,
+    textAlign: 'center', lineHeight: 1.25,
+  },
+
+  creditsText: { color: 'var(--text-secondary)', fontSize: 17, margin: 0, lineHeight: 1.6 },
+  creditsLinks: { display: 'flex', gap: 14, flexWrap: 'wrap' },
   linkChip: {
     display: 'inline-block',
-    background: 'var(--bg3)', border: '1px solid var(--border-strong)', borderRadius: 20,
-    padding: '9px 16px', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600,
+    background: 'var(--bg3)', border: '1px solid var(--border-strong)', borderRadius: 24,
+    padding: '13px 20px', color: 'var(--text-secondary)', fontSize: 15, fontWeight: 600,
   },
 
   versionTag: {
     display: 'inline-block', background: 'var(--bg3)', border: '1px solid var(--border-strong)',
-    borderRadius: 8, padding: '8px 14px', color: 'var(--text-muted)', fontSize: 13, fontWeight: 600,
+    borderRadius: 10, padding: '13px 20px', color: 'var(--text-muted)', fontSize: 16, fontWeight: 600,
   },
 };

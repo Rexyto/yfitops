@@ -34,7 +34,7 @@ export default class TvErrorBoundary extends React.Component {
     return (
       <div style={styles.wrap}>
         <div style={styles.card}>
-          <span style={{ fontSize: 48 }}>⚠️</span>
+          <span style={{ fontSize: 64 }}>⚠️</span>
           <h2 style={styles.title}>Algo ha fallado</h2>
           <p style={styles.msg}>{this.state.error?.message || 'Error desconocido'}</p>
           <p style={styles.hint}>
@@ -56,15 +56,15 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
   card: {
-    width: 540, maxWidth: '90vw', background: '#1a1a1a', border: '1px solid #2a2a2a',
-    borderRadius: 20, padding: 40, display: 'flex', flexDirection: 'column',
-    alignItems: 'center', textAlign: 'center', gap: 8,
+    width: 680, maxWidth: '90vw', background: '#1a1a1a', border: '1px solid #2a2a2a',
+    borderRadius: 26, padding: 52, display: 'flex', flexDirection: 'column',
+    alignItems: 'center', textAlign: 'center', gap: 10,
   },
-  title: { color: '#ffffff', margin: '8px 0 0', fontSize: 24, fontWeight: 800 },
-  msg: { color: '#ff8080', fontSize: 14, margin: 0, wordBreak: 'break-word', fontFamily: 'monospace' },
-  hint: { color: '#888888', fontSize: 13, margin: '4px 0 16px', lineHeight: 1.5 },
+  title: { color: '#ffffff', margin: '10px 0 0', fontSize: 30, fontWeight: 800 },
+  msg: { color: '#ff8080', fontSize: 17, margin: 0, wordBreak: 'break-word', fontFamily: 'monospace' },
+  hint: { color: '#888888', fontSize: 16, margin: '6px 0 20px', lineHeight: 1.5 },
   btn: {
-    background: '#1ed760', border: 'none', borderRadius: 10,
-    padding: '14px 28px', color: '#000', fontWeight: 800, fontSize: 15, cursor: 'pointer',
+    background: '#1ed760', border: 'none', borderRadius: 12,
+    padding: '18px 34px', color: '#000', fontWeight: 800, fontSize: 18, cursor: 'pointer',
   },
 };

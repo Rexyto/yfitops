@@ -127,10 +127,23 @@ const es = {
   // Ajustes — Apariencia
   'settings.appearance.title': 'Apariencia',
   'settings.appearance.subtitle': 'Se aplica a toda la app y se recuerda entre sesiones',
-  'settings.appearance.themeLabel': (theme) => `Tema ${theme === 'dark' ? 'oscuro' : 'claro'}`,
-  'settings.appearance.themeHint': 'Cambia entre modo claro y oscuro',
+  'settings.appearance.themeLabel': (themeName) => `Tema: ${themeName}`,
+  'settings.appearance.themeHint': 'Elige el color de fondo de toda la app',
   'settings.appearance.languageLabel': 'Idioma',
   'settings.appearance.languageHint': 'Cambia el idioma de toda la interfaz',
+
+  // Nombres de los temas de color
+  'theme.dark': 'Oscuro',
+  'theme.light': 'Claro',
+  'theme.red': 'Rojo',
+  'theme.sky': 'Celeste',
+  'theme.purple': 'Morado',
+  'theme.green': 'Verde',
+  'theme.orange': 'Naranja',
+  'theme.amber': 'Ámbar',
+  'theme.pink': 'Rosa',
+  'theme.teal': 'Turquesa',
+  'theme.indigo': 'Índigo',
 
   // Ajustes — Registro (logs)
   'settings.logs.title': 'Registro (logs)',
@@ -274,10 +287,23 @@ const en = {
   // Settings — Appearance
   'settings.appearance.title': 'Appearance',
   'settings.appearance.subtitle': 'Applies to the whole app and is remembered between sessions',
-  'settings.appearance.themeLabel': (theme) => `${theme === 'dark' ? 'Dark' : 'Light'} theme`,
-  'settings.appearance.themeHint': 'Switch between light and dark mode',
+  'settings.appearance.themeLabel': (themeName) => `Theme: ${themeName}`,
+  'settings.appearance.themeHint': 'Choose the background color for the whole app',
   'settings.appearance.languageLabel': 'Language',
   'settings.appearance.languageHint': 'Changes the language across the whole interface',
+
+  // Theme color names
+  'theme.dark': 'Dark',
+  'theme.light': 'Light',
+  'theme.red': 'Red',
+  'theme.sky': 'Sky Blue',
+  'theme.purple': 'Purple',
+  'theme.green': 'Green',
+  'theme.orange': 'Orange',
+  'theme.amber': 'Amber',
+  'theme.pink': 'Pink',
+  'theme.teal': 'Teal',
+  'theme.indigo': 'Indigo',
 
   // Settings — Logs
   'settings.logs.title': 'Logs',

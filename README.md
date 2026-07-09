@@ -337,41 +337,79 @@ yfitops/
 │   ├── node_modules/              # Dependencias (no versionar)
 │   └── web/                       # Panel administrativo React/Vite
 │
-└── yfitopspc/                   # App de escritorio Electron — genera tanto el instalador de Windows como el binario de Linux
-    ├── main.js                  # Proceso principal de Electron
-    ├── preload.js               # Puente seguro entre Electron y el renderer (contextBridge)
-    ├── discordRpc.js            # Discord Rich Presence ("reproduciendo ahora")
-    ├── localData.js             # Datos solo-locales: foto de perfil, canciones/playlists descargadas, caché
-    ├── autostart.js             # Inicio automático con el sistema (Windows/macOS nativo, Linux vía .desktop)
-    ├── webpack.config.js        # Bundler del renderer (React)
+├── yfitopspc/                   # App de escritorio Electron — genera tanto el instalador de Windows como el binario de Linux
+│   ├── main.js                  # Proceso principal de Electron
+│   ├── preload.js               # Puente seguro entre Electron y el renderer (contextBridge)
+│   ├── discordRpc.js            # Discord Rich Presence ("reproduciendo ahora")
+│   ├── localData.js             # Datos solo-locales: foto de perfil, canciones/playlists descargadas, caché
+│   ├── autostart.js             # Inicio automático con el sistema (Windows/macOS nativo, Linux vía .desktop)
+│   ├── webpack.config.js        # Bundler del renderer (React)
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── assets/                  # Iconos de la app (.ico, etc.)
+│   ├── public/                  # Estáticos copiados tal cual al build (logo, index.html base)
+│   ├── dist/                    # Build del renderer generado por webpack (no versionar)
+│   ├── release/                 # Instaladores/ejecutables generados (no versionar)
+│   ├── node_modules/            # Dependencias (no versionar)
+│   └── src/                     # Código fuente del renderer (React)
+│       ├── index.html           # Variables CSS de los 11 temas de color
+│       ├── index.jsx            # Punto de entrada de React
+│       ├── App.jsx              # Componente raíz, título custom, updates, changelog, aviso sin conexión
+│       ├── api.js               # Llamadas a la API del servidor → /pc/*
+│       ├── i18n/
+│       │   ├── translations.js  # Textos ES/EN de toda la interfaz
+│       │   └── index.js         # Hook useT()
+│       ├── store/
+│       │   ├── MusicStore.js    # Estado global (zustand): auth, canciones, reproductor, heartbeat, Discord RPC
+│       │   └── SettingsStore.js # Tema, idioma, foto de perfil, conectividad, descargas offline, autoarranque
+│       └── components/
+│           ├── LoginScreen.jsx
+│           ├── Sidebar.jsx
+│           ├── SongsView.jsx
+│           ├── FavoritesView.jsx
+│           ├── PlaylistsView.jsx
+│           ├── SettingsView.jsx # Perfil, apariencia (11 temas), idioma, descargas offline, caché, créditos, versión
+│           ├── PlayerBar.jsx
+│           ├── PlayerModal.jsx
+│           └── QueueView.jsx
+│
+└── yfitops-samsungtv/            # App para Samsung Smart TV (Tizen)
+    ├── config.xml                # Manifiesto del widget Tizen (versión, permisos, orientación, feature de pantalla 1920x1080)
+    ├── webpack.config.js         # Bundler (target 'web', Babel con preset-env apuntado a Chrome 56 — motor real de Tizen 4.x)
     ├── package.json
     ├── package-lock.json
-    ├── assets/                  # Iconos de la app (.ico, etc.)
-    ├── public/                  # Estáticos copiados tal cual al build (logo, index.html base)
-    ├── dist/                    # Build del renderer generado por webpack (no versionar)
-    ├── release/                 # Instaladores/ejecutables generados (no versionar)
-    ├── node_modules/            # Dependencias (no versionar)
-    └── src/                     # Código fuente del renderer (React)
-        ├── index.html           # Variables CSS de los 11 temas de color
-        ├── index.jsx            # Punto de entrada de React
-        ├── App.jsx              # Componente raíz, título custom, updates, changelog, aviso sin conexión
-        ├── api.js               # Llamadas a la API del servidor → /pc/*
+    ├── .gitignore
+    ├── public/
+    │   └── logo.png              # Única fuente del logo: también genera icon.png del paquete .wgt
+    └── src/                      # Código fuente del renderer (React), sin proceso Node/Electron
+        ├── index.html            # Variables CSS de los 11 temas de color + tamaños de fuente "10 pies" (sofá)
+        ├── index.jsx             # Punto de entrada de React: instala captura de consola y bridge antes de montar
+        ├── App.jsx               # Componente raíz, versión fija de la app, changelog, aviso sin conexión
+        ├── api.js                # Llamadas a la API del servidor → /pc/* (comparte backend con la app de PC)
         ├── i18n/
-        │   ├── translations.js  # Textos ES/EN de toda la interfaz
-        │   └── index.js         # Hook useT()
+        │   ├── translations.js   # Textos ES/EN de toda la interfaz (+ nombres de los 11 temas)
+        │   └── index.js          # Hook useT()
         ├── store/
-        │   ├── MusicStore.js    # Estado global (zustand): auth, canciones, reproductor, heartbeat, Discord RPC
-        │   └── SettingsStore.js # Tema, idioma, foto de perfil, conectividad, descargas offline, autoarranque
+        │   ├── MusicStore.js     # Estado global (zustand): auth, canciones, reproductor, cola, heartbeat
+        │   └── SettingsStore.js  # Tema (11 disponibles), idioma, foto de perfil, conectividad
+        ├── tv/                   # Todo lo específico de "vivir dentro de una TV con mando"
+        │   ├── tvBridge.js       # window.electronAPI simulado con localStorage (sesión, versión, foto de perfil)
+        │   ├── tvNavigation.js   # Navegación espacial con flechas/OK/Atrás del mando + teclas de multimedia
+        │   ├── backStack.js      # Pila de "capas" (modales/paneles) que la tecla Atrás va cerrando una a una
+        │   ├── ErrorBoundary.jsx # Pantalla de error a pantalla completa en vez de quedarse en negro
+        │   ├── logger.js         # Registro de logs/errores en memoria + localStorage (Ajustes → Registro)
+        │   └── format.js         # Utilidades de formato de tiempo (sin padStart, no existe en Chromium 56)
         └── components/
             ├── LoginScreen.jsx
             ├── Sidebar.jsx
             ├── SongsView.jsx
             ├── FavoritesView.jsx
-            ├── PlaylistsView.jsx
-            ├── SettingsView.jsx # Perfil, apariencia (11 temas), idioma, descargas offline, caché, créditos, versión
+            ├── PlaylistsView.jsx   # Tarjetas con flexbox (no CSS grid) por compatibilidad con Tizen 4.x
+            ├── SettingsView.jsx    # Perfil, apariencia (11 temas), idioma, registro de logs, créditos, versión
             ├── PlayerBar.jsx
             ├── PlayerModal.jsx
-            └── QueueView.jsx
+            ├── QueueView.jsx
+            └── LogsModal.jsx       # Visor del registro de logs (Ajustes → Registro)
 ```
 
 > El servidor guarda las carátulas de las canciones en `servidor/portadas/`. Es una carpeta más a tener en cuenta junto a `canciones/` y `playlist/` a la hora de hacer backups o desplegar.

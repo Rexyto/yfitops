@@ -79,7 +79,7 @@ export default function QueueView({ onClose }) {
 
           {queue.length === 0 && (
             <div style={styles.empty}>
-              <span style={{ fontSize: 40 }}>🗒️</span>
+              <span style={{ fontSize: 52 }}>🗒️</span>
               <p style={styles.emptyTitle}>{t('queue.empty')}</p>
               <p style={styles.emptySub}>{t('queue.emptyHint')}</p>
             </div>
@@ -96,51 +96,51 @@ const styles = {
     display: 'flex', justifyContent: 'flex-end', zIndex: 600,
   },
   panel: {
-    width: 420, maxWidth: '90vw', height: '100%',
+    width: 560, maxWidth: '90vw', height: '100%',
     background: 'var(--bg2)', borderLeft: '1px solid var(--border)',
-    display: 'flex', flexDirection: 'column', padding: '20px 0',
+    display: 'flex', flexDirection: 'column', padding: '28px 0',
     boxShadow: '-12px 0 40px rgba(0,0,0,0.4)',
   },
-  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '0 20px 14px' },
-  title: { color: 'var(--text)', fontSize: 18, fontWeight: 800, margin: 0 },
-  sub: { color: 'var(--text-dim)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
+  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '0 28px 18px' },
+  title: { color: 'var(--text)', fontSize: 24, fontWeight: 800, margin: 0 },
+  sub: { color: 'var(--text-dim)', fontSize: 14, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
   closeBtn: {
     background: 'var(--bg3)', border: 'none', borderRadius: '50%',
-    width: 28, height: 28, color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer',
+    width: 42, height: 42, color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   nowPlaying: {
-    margin: '0 20px 14px', padding: '10px 14px',
-    background: '#1ed76015', border: '1px solid #1ed76030', borderRadius: 10,
-    display: 'flex', flexDirection: 'column', gap: 2,
+    margin: '0 28px 18px', padding: '14px 18px',
+    background: '#1ed76015', border: '1px solid #1ed76030', borderRadius: 12,
+    display: 'flex', flexDirection: 'column', gap: 4,
   },
-  nowPlayingLabel: { color: '#1ed760', fontSize: 10, fontWeight: 800, letterSpacing: 1 },
-  nowPlayingTitle: { color: 'var(--text)', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  nowPlayingLabel: { color: '#1ed760', fontSize: 12, fontWeight: 800, letterSpacing: 1 },
+  nowPlayingTitle: { color: 'var(--text)', fontSize: 17, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   clearBtn: {
-    margin: '0 20px 12px', background: 'none', border: '1px solid var(--border-strong)',
-    borderRadius: 8, padding: '7px 14px', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700,
+    margin: '0 28px 16px', background: 'none', border: '1px solid var(--border-strong)',
+    borderRadius: 10, padding: '10px 18px', color: 'var(--text-muted)', fontSize: 15, fontWeight: 700,
     cursor: 'pointer', alignSelf: 'flex-start',
   },
-  list: { flex: 1, overflowY: 'auto', padding: '0 8px 20px' },
+  list: { flex: 1, overflowY: 'auto', padding: '0 12px 24px' },
   row: {
-    display: 'flex', alignItems: 'center', padding: '8px 12px',
-    margin: '1px 4px', borderRadius: 8, gap: 8,
+    display: 'flex', alignItems: 'center', padding: '12px 16px',
+    margin: '2px 6px', borderRadius: 12, gap: 12,
   },
-  idx: { width: 20, color: 'var(--text-dim)', fontSize: 12, textAlign: 'center', flexShrink: 0, fontWeight: 600 },
-  cover: { width: 40, height: 40, borderRadius: 6, objectFit: 'cover', flexShrink: 0 },
+  idx: { width: 28, color: 'var(--text-dim)', fontSize: 15, textAlign: 'center', flexShrink: 0, fontWeight: 600 },
+  cover: { width: 56, height: 56, borderRadius: 8, objectFit: 'cover', flexShrink: 0 },
   coverEmpty: {
-    width: 40, height: 40, borderRadius: 6, background: 'var(--bg3)',
+    width: 56, height: 56, borderRadius: 8, background: 'var(--bg3)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)', flexShrink: 0,
   },
-  meta: { flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, cursor: 'pointer' },
-  songTitle: { color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  songArtist: { color: 'var(--text-dim)', fontSize: 12 },
-  actions: { display: 'flex', gap: 2, flexShrink: 0 },
+  meta: { flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, cursor: 'pointer' },
+  songTitle: { color: 'var(--text-secondary)', fontSize: 17, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  songArtist: { color: 'var(--text-dim)', fontSize: 15 },
+  actions: { display: 'flex', gap: 4, flexShrink: 0 },
   actionBtn: {
-    background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 13,
-    cursor: 'pointer', padding: '4px 6px', borderRadius: 4,
+    background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 17,
+    cursor: 'pointer', padding: '8px 10px', borderRadius: 6,
   },
-  empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 70, gap: 4 },
-  emptyTitle: { color: 'var(--text)', fontWeight: 700, margin: '10px 0 0', fontSize: 15 },
-  emptySub: { color: 'var(--text-dim)', fontSize: 13, margin: 0, textAlign: 'center', padding: '0 24px' },
+  empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 90, gap: 6 },
+  emptyTitle: { color: 'var(--text)', fontWeight: 700, margin: '14px 0 0', fontSize: 18 },
+  emptySub: { color: 'var(--text-dim)', fontSize: 15, margin: 0, textAlign: 'center', padding: '0 30px' },
 };

@@ -7,9 +7,10 @@
   <script>
     // Aplicar el tema guardado ANTES de pintar, para evitar parpadeos (FOUC)
     (function () {
+      var VALID_THEMES = ['dark', 'light', 'red', 'sky', 'purple', 'green', 'orange', 'amber', 'pink', 'teal', 'indigo'];
       try {
         var saved = localStorage.getItem('yfitops_theme');
-        document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+        document.documentElement.setAttribute('data-theme', VALID_THEMES.indexOf(saved) !== -1 ? saved : 'dark');
       } catch (e) {
         document.documentElement.setAttribute('data-theme', 'dark');
       }
@@ -62,6 +63,204 @@
       --playerbar-grad-2: #f0f0f0;
     }
 
+    /* ── Rojo (claro) — iOS/macOS System Red (#FF3B30) ──────── */
+    :root[data-theme="red"] {
+      --bg0: #f2f2f7;
+      --bg1: #ffffff;
+      --bg2: #ffffff;
+      --bg3: #fdeeed;
+      --bg4: #fbdedb;
+      --border: #ffd9d6;
+      --border-strong: #ffb3ac;
+      --text: #1c1c1e;
+      --text-secondary: #3a3a3c;
+      --text-muted: #6e6e73;
+      --text-dim: #8e8e93;
+      --text-faint: #c7c7cc;
+      --scrollbar-track: #f2f2f7;
+      --scrollbar-thumb: #ffb3ac;
+      --scrollbar-thumb-hover: #ff8f85;
+      --overlay: rgba(28, 28, 30, 0.4);
+      --playerbar-grad-1: #ffffff;
+      --playerbar-grad-2: #fff2f1;
+    }
+
+    /* ── Celeste (claro) — Telegram Day (#2AABEE) ───────────── */
+    :root[data-theme="sky"] {
+      --bg0: #f2f6fa;
+      --bg1: #ffffff;
+      --bg2: #ffffff;
+      --bg3: #eaf5fc;
+      --bg4: #dcecf7;
+      --border: #cfe8f7;
+      --border-strong: #a8d8f0;
+      --text: #1c1c1e;
+      --text-secondary: #3a3a3c;
+      --text-muted: #6e6e73;
+      --text-dim: #8e8e93;
+      --text-faint: #c7c7cc;
+      --scrollbar-track: #f2f6fa;
+      --scrollbar-thumb: #a8d8f0;
+      --scrollbar-thumb-hover: #7cc4e8;
+      --overlay: rgba(20, 40, 55, 0.4);
+      --playerbar-grad-1: #ffffff;
+      --playerbar-grad-2: #eaf6fc;
+    }
+
+    /* ── Morado (oscuro) — System Purple (#BF5AF2) ──────────── */
+    :root[data-theme="purple"] {
+      --bg0: #1e1a24;
+      --bg1: #241f2b;
+      --bg2: #2b2433;
+      --bg3: #332b3d;
+      --bg4: #3a3145;
+      --border: #3a3145;
+      --border-strong: #493c56;
+      --text: #ece6f5;
+      --text-secondary: #c9bdd9;
+      --text-muted: #9c8bb0;
+      --text-dim: #7a6a8c;
+      --text-faint: #574a66;
+      --scrollbar-track: #241f2b;
+      --scrollbar-thumb: #493c56;
+      --scrollbar-thumb-hover: #5a4a6b;
+      --overlay: rgba(10, 6, 16, 0.75);
+      --playerbar-grad-1: #1f1a26;
+      --playerbar-grad-2: #291f31;
+    }
+
+    /* ── Verde (claro) — WhatsApp / System Green (#34C759) ──── */
+    :root[data-theme="green"] {
+      --bg0: #f1f8f3;
+      --bg1: #ffffff;
+      --bg2: #ffffff;
+      --bg3: #e8f7ec;
+      --bg4: #dbf0e1;
+      --border: #cdeed7;
+      --border-strong: #a3ddb4;
+      --text: #1c1c1e;
+      --text-secondary: #3a3a3c;
+      --text-muted: #6e6e73;
+      --text-dim: #8e8e93;
+      --text-faint: #c7c7cc;
+      --scrollbar-track: #f1f8f3;
+      --scrollbar-thumb: #a3ddb4;
+      --scrollbar-thumb-hover: #7cc98f;
+      --overlay: rgba(20, 40, 28, 0.4);
+      --playerbar-grad-1: #ffffff;
+      --playerbar-grad-2: #eaf8ee;
+    }
+
+    /* ── Naranja (claro) — SoundCloud / System Orange (#FF9500) */
+    :root[data-theme="orange"] {
+      --bg0: #fdf6f0;
+      --bg1: #ffffff;
+      --bg2: #ffffff;
+      --bg3: #fdecdc;
+      --bg4: #fbe0c6;
+      --border: #fddfb8;
+      --border-strong: #ffc98a;
+      --text: #1c1c1e;
+      --text-secondary: #3a3a3c;
+      --text-muted: #6e6e73;
+      --text-dim: #8e8e93;
+      --text-faint: #c7c7cc;
+      --scrollbar-track: #fdf6f0;
+      --scrollbar-thumb: #ffc98a;
+      --scrollbar-thumb-hover: #ffb35c;
+      --overlay: rgba(40, 26, 10, 0.4);
+      --playerbar-grad-1: #ffffff;
+      --playerbar-grad-2: #fdefe2;
+    }
+
+    /* ── Ámbar (claro) — System Yellow (#FFCC00) ─────────────── */
+    :root[data-theme="amber"] {
+      --bg0: #fdfbf0;
+      --bg1: #ffffff;
+      --bg2: #ffffff;
+      --bg3: #fdf6d9;
+      --bg4: #fbefbc;
+      --border: #fbeba3;
+      --border-strong: #f5db61;
+      --text: #1c1c1e;
+      --text-secondary: #3a3a3c;
+      --text-muted: #6e6e73;
+      --text-dim: #8e8e93;
+      --text-faint: #c7c7cc;
+      --scrollbar-track: #fdfbf0;
+      --scrollbar-thumb: #f5db61;
+      --scrollbar-thumb-hover: #eccb2e;
+      --overlay: rgba(40, 34, 6, 0.4);
+      --playerbar-grad-1: #ffffff;
+      --playerbar-grad-2: #fdf7de;
+    }
+
+    /* ── Rosa (oscuro) — Instagram / System Pink (#FF375F) ──── */
+    :root[data-theme="pink"] {
+      --bg0: #241118;
+      --bg1: #2b141d;
+      --bg2: #331824;
+      --bg3: #3d1c2b;
+      --bg4: #472133;
+      --border: #472133;
+      --border-strong: #5c2941;
+      --text: #fbe6ee;
+      --text-secondary: #e3bccd;
+      --text-muted: #ab7f92;
+      --text-dim: #8c6474;
+      --text-faint: #614450;
+      --scrollbar-track: #2b141d;
+      --scrollbar-thumb: #5c2941;
+      --scrollbar-thumb-hover: #713350;
+      --overlay: rgba(15, 4, 9, 0.8);
+      --playerbar-grad-1: #251219;
+      --playerbar-grad-2: #2f1721;
+    }
+
+    /* ── Turquesa (oscuro) — WhatsApp Dark / System Teal ─────── */
+    :root[data-theme="teal"] {
+      --bg0: #0f1f21;
+      --bg1: #132529;
+      --bg2: #172c31;
+      --bg3: #1b333a;
+      --bg4: #203b43;
+      --border: #203b43;
+      --border-strong: #2a4b54;
+      --text: #e3f6f9;
+      --text-secondary: #bfe3e9;
+      --text-muted: #7fa8ae;
+      --text-dim: #63868c;
+      --text-faint: #445d61;
+      --scrollbar-track: #132529;
+      --scrollbar-thumb: #2a4b54;
+      --scrollbar-thumb-hover: #345d67;
+      --overlay: rgba(4, 12, 13, 0.8);
+      --playerbar-grad-1: #102022;
+      --playerbar-grad-2: #16292d;
+    }
+
+    /* ── Índigo (oscuro) — Discord blurple (#5865F2) ─────────── */
+    :root[data-theme="indigo"] {
+      --bg0: #171a24;
+      --bg1: #1c1f2b;
+      --bg2: #212431;
+      --bg3: #272b3c;
+      --bg4: #2e3247;
+      --border: #2e3247;
+      --border-strong: #3a3f59;
+      --text: #e8eaf9;
+      --text-secondary: #c3c8ec;
+      --text-muted: #8b90bd;
+      --text-dim: #6c7099;
+      --text-faint: #4b4e6d;
+      --scrollbar-track: #1c1f2b;
+      --scrollbar-thumb: #3a3f59;
+      --scrollbar-thumb-hover: #474d6d;
+      --overlay: rgba(6, 7, 14, 0.8);
+      --playerbar-grad-1: #181b26;
+      --playerbar-grad-2: #212431;
+    }
+
     html, body {
       width: 1920px;
       height: 1080px;
@@ -72,29 +271,32 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       overflow: hidden;
       transition: background 0.15s ease, color 0.15s ease;
-      /* Un pelín más grande que en PC: esto se ve desde el sofá, no a 40cm */
-      font-size: 17px;
+      /* UI "10 pies": se ve desde el sofá, no a 40cm — todo bastante
+         más grande que la versión de escritorio. */
+      font-size: 22px;
     }
     #root { width: 100%; height: 100%; }
-    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar { width: 10px; }
     ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
-    ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 5px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
     /* ── Foco de mando a distancia ─────────────────────────────
        Todo lo enfocable (botones, filas, inputs) recibe un contorno
-       verde bien visible para saber siempre dónde estás con el mando. */
+       verde grueso y con brillo para verse bien desde lejos: no
+       basta un simple outline fino como en un monitor de PC. */
     button:focus,
     [tabindex]:focus,
     input:focus,
     select:focus,
     a:focus {
-      outline: 3px solid #1ed760;
-      outline-offset: 2px;
-      border-radius: 6px;
+      outline: 4px solid #1ed760;
+      outline-offset: 3px;
+      border-radius: 8px;
+      box-shadow: 0 0 0 8px rgba(30, 215, 96, 0.18);
     }
     :focus:not(:focus-visible) {
-      outline: 3px solid #1ed760;
+      outline: 4px solid #1ed760;
     }
   </style>
 </head>

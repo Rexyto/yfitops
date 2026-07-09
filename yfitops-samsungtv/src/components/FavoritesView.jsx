@@ -71,7 +71,7 @@ export default function FavoritesView() {
                 onClick={e => handleAddToQueue(song, e)}
                 title={t('favorites.addToQueue')}
               >
-                <span style={{ color: justQueued ? '#1ed760' : 'var(--text-dim)', fontSize: 18 }}>
+                <span style={{ color: justQueued ? '#1ed760' : 'var(--text-dim)', fontSize: 21 }}>
                   {justQueued ? '✓' : '+'}
                 </span>
               </button>
@@ -79,7 +79,7 @@ export default function FavoritesView() {
                 style={styles.favBtn}
                 onClick={e => { e.stopPropagation(); toggleFavorite(song.id); }}
               >
-                <span style={{ color: '#1ed760', fontSize: 18 }}>♥</span>
+                <span style={{ color: '#1ed760', fontSize: 21 }}>♥</span>
               </button>
             </div>
           );
@@ -87,7 +87,7 @@ export default function FavoritesView() {
 
         {favSongs.length === 0 && (
           <div style={styles.empty}>
-            <span style={{ fontSize: 56 }}>🤍</span>
+            <span style={{ fontSize: 64 }}>🤍</span>
             <p style={styles.emptyTitle}>{t('favorites.empty')}</p>
             <p style={styles.emptySub}>{t('favorites.emptyHint')}</p>
           </div>
@@ -98,46 +98,46 @@ export default function FavoritesView() {
 }
 
 const styles = {
-  container: { padding: '0 0 20px 0' },
-  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '28px 28px 16px' },
-  title: { fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5, margin: 0 },
-  sub: { fontSize: 12, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
-  headerActions: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' },
+  container: { padding: '0 0 24px 0' },
+  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '36px 36px 20px' },
+  title: { fontSize: 38, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5, margin: 0 },
+  sub: { fontSize: 15, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 },
+  headerActions: { display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' },
   queueAllBtn: {
     background: 'none', border: '1px solid var(--border-strong)',
-    borderRadius: 20, padding: '8px 14px',
-    color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+    borderRadius: 24, padding: '11px 18px',
+    color: 'var(--text-muted)', fontSize: 15, fontWeight: 700, cursor: 'pointer',
   },
   shuffleBtn: {
     background: 'none', border: '1px solid #1ed76055',
-    borderRadius: 20, padding: '8px 16px',
-    color: '#1ed760', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+    borderRadius: 24, padding: '11px 20px',
+    color: '#1ed760', fontSize: 16, fontWeight: 700, cursor: 'pointer',
   },
   playBtn: {
     background: '#1ed760', border: 'none',
-    borderRadius: 20, padding: '8px 18px',
-    color: '#000', fontSize: 13, fontWeight: 800, cursor: 'pointer',
+    borderRadius: 24, padding: '11px 24px',
+    color: '#000', fontSize: 16, fontWeight: 800, cursor: 'pointer',
   },
   list: {},
   row: {
     display: 'flex', alignItems: 'center',
-    padding: '9px 20px', margin: '1px 8px',
-    borderRadius: 8, cursor: 'pointer', transition: 'background 0.1s',
+    padding: '14px 28px', margin: '2px 12px',
+    borderRadius: 12, cursor: 'pointer', transition: 'background 0.1s',
   },
   rowActive: { background: 'var(--bg3)' },
-  idx: { width: 28, color: 'var(--text-dim)', fontSize: 13, textAlign: 'center', fontWeight: 600, flexShrink: 0 },
-  cover: { width: 44, height: 44, borderRadius: 6, marginRight: 12, objectFit: 'cover', flexShrink: 0 },
+  idx: { width: 40, color: 'var(--text-dim)', fontSize: 16, textAlign: 'center', fontWeight: 600, flexShrink: 0 },
+  cover: { width: 60, height: 60, borderRadius: 8, marginRight: 16, objectFit: 'cover', flexShrink: 0 },
   coverEmpty: {
-    width: 44, height: 44, borderRadius: 6, marginRight: 12,
+    width: 60, height: 60, borderRadius: 8, marginRight: 16,
     background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 18, color: 'var(--text-faint)', flexShrink: 0,
+    fontSize: 22, color: 'var(--text-faint)', flexShrink: 0,
   },
-  meta: { flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 },
-  titleRow: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 },
-  songTitle: { color: 'var(--text-secondary)', fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  songArtist: { color: 'var(--text-dim)', fontSize: 12 },
-  favBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: '6px 8px' },
-  empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 100, gap: 12 },
-  emptyTitle: { color: 'var(--text)', fontSize: 20, fontWeight: 700, margin: 0 },
-  emptySub: { color: 'var(--text-dim)', fontSize: 14, margin: 0, textAlign: 'center' },
+  meta: { flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 },
+  titleRow: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
+  songTitle: { color: 'var(--text-secondary)', fontSize: 18, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  songArtist: { color: 'var(--text-dim)', fontSize: 15 },
+  favBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: '10px 12px' },
+  empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 120, gap: 14 },
+  emptyTitle: { color: 'var(--text)', fontSize: 24, fontWeight: 700, margin: 0 },
+  emptySub: { color: 'var(--text-dim)', fontSize: 17, margin: 0, textAlign: 'center' },
 };

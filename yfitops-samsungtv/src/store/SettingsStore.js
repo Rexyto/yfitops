@@ -3,6 +3,27 @@ import { create } from 'zustand';
 const THEME_KEY = 'yfitops_theme';
 const LANG_KEY = 'yfitops_language';
 
+// ── Temas disponibles ─────────────────────────────────────────
+// Mismo catálogo que la app de PC. `swatch` son los 2 colores que se
+// pintan en la bolita del selector: [color principal, color secundario].
+// Paletas de referencia: iOS/macOS (rojo, ámbar, rosa, turquesa),
+// Telegram (celeste), Discord (morado, índigo/blurple), WhatsApp
+// (verde) y SoundCloud (naranja).
+export const THEMES = [
+  { id: 'dark',     swatch: ['#1a1a1a', '#0a0a0a'] },
+  { id: 'light',    swatch: ['#ffffff', '#e2e2e2'] },
+  { id: 'red',      swatch: ['#FF3B30', '#ffffff'] },
+  { id: 'sky',      swatch: ['#2AABEE', '#ffffff'] },
+  { id: 'purple',   swatch: ['#BF5AF2', '#1e1a24'] },
+  { id: 'green',    swatch: ['#25D366', '#ffffff'] },
+  { id: 'orange',   swatch: ['#FF5500', '#ffffff'] },
+  { id: 'amber',    swatch: ['#FFCC00', '#ffffff'] },
+  { id: 'pink',     swatch: ['#FF375F', '#241118'] },
+  { id: 'teal',     swatch: ['#30B0C7', '#0f1f21'] },
+  { id: 'indigo',   swatch: ['#5865F2', '#171a24'] },
+];
+const THEME_IDS = THEMES.map(t => t.id);
+
 function applyThemeToDocument(theme) {
   document.documentElement.setAttribute('data-theme', theme);
 }
@@ -17,9 +38,17 @@ function detectDefaultLanguage() {
   return nav.startsWith('en') ? 'en' : 'es';
 }
 
+function detectDefaultTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (THEME_IDS.includes(saved)) return saved;
+  } catch {}
+  return 'dark';
+}
+
 const useSettingsStore = create((set, get) => ({
   // ── Apariencia ────────────────────────────────────────────
-  theme: (localStorage.getItem(THEME_KEY) === 'light') ? 'light' : 'dark',
+  theme: detectDefaultTheme(),
   language: detectDefaultLanguage(),
 
   // ── Perfil ────────────────────────────────────────────────
@@ -51,10 +80,13 @@ const useSettingsStore = create((set, get) => ({
 
   // ── Tema ────────────────────────────────────────────────────
   setTheme: (theme) => {
+    if (!THEME_IDS.includes(theme)) return;
     localStorage.setItem(THEME_KEY, theme);
     applyThemeToDocument(theme);
     set({ theme });
   },
+  // Se mantiene por compatibilidad con quien todavía llame a toggleTheme()
+  // (alterna solo entre oscuro/claro, el resto de temas se eligen con setTheme).
   toggleTheme: () => get().setTheme(get().theme === 'dark' ? 'light' : 'dark'),
 
   // ── Idioma ──────────────────────────────────────────────────
