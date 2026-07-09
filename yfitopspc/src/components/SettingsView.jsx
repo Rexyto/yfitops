@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import useMusicStore from '../store/MusicStore';
-import useSettingsStore from '../store/SettingsStore';
+import useSettingsStore, { THEMES } from '../store/SettingsStore';
 import { useT } from '../i18n';
 import { SERVER_URL } from '../api';
 
@@ -93,7 +93,7 @@ function DownloadableRow({ playlist, type, allSongs, isOnline }) {
 export default function SettingsView({ appVersion }) {
   const { playlists, folderPlaylists, songs } = useMusicStore();
   const {
-    theme, toggleTheme, language, setLanguage,
+    theme, setTheme, language, setLanguage,
     profilePicture, uploadProfilePicture, removeProfilePicture,
     isOnline, cacheBytes, cacheSizeLabel, clearCache, offlinePlaylists,
     launchOnStartup, setLaunchOnStartup,
@@ -209,19 +209,37 @@ export default function SettingsView({ appVersion }) {
             title={t('settings.appearance.title')}
             subtitle={t('settings.appearance.subtitle')}
           >
-            <div style={styles.toggleRow}>
+            <div style={styles.themeBlock}>
               <div>
-                <span style={styles.toggleLabel}>{t('settings.appearance.themeLabel', theme)}</span>
+                <span style={styles.toggleLabel}>{t('settings.appearance.themeLabel', t(`theme.${theme}`))}</span>
                 <p style={styles.toggleHint}>{t('settings.appearance.themeHint')}</p>
               </div>
-              <button
-                style={{ ...styles.switch, ...(theme === 'light' ? styles.switchOn : {}) }}
-                onClick={toggleTheme}
-                role="switch"
-                aria-checked={theme === 'light'}
-              >
-                <span style={{ ...styles.switchDot, ...(theme === 'light' ? styles.switchDotOn : {}) }} />
-              </button>
+              <div style={styles.themePicker}>
+                {THEMES.map(themeDef => {
+                  const isActive = theme === themeDef.id;
+                  return (
+                    <button
+                      key={themeDef.id}
+                      style={styles.themeSwatchBtn}
+                      onClick={() => setTheme(themeDef.id)}
+                      title={t(`theme.${themeDef.id}`)}
+                      aria-label={t(`theme.${themeDef.id}`)}
+                      aria-pressed={isActive}
+                    >
+                      <span
+                        style={{
+                          ...styles.themeSwatch,
+                          background: `linear-gradient(135deg, ${themeDef.swatch[0]} 50%, ${themeDef.swatch[1]} 50%)`,
+                          ...(isActive ? styles.themeSwatchActive : {}),
+                        }}
+                      >
+                        {isActive && <span style={styles.themeSwatchCheck}>✓</span>}
+                      </span>
+                      <span style={styles.themeSwatchLabel}>{t(`theme.${themeDef.id}`)}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div style={styles.toggleRow}>
@@ -392,6 +410,32 @@ const styles = {
   select: {
     background: 'var(--bg3)', border: '1px solid var(--border-strong)', borderRadius: 8,
     padding: '8px 12px', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer',
+  },
+
+  themeBlock: { display: 'flex', flexDirection: 'column', gap: 12 },
+  themePicker: { display: 'flex', flexWrap: 'wrap', gap: 14, paddingTop: 2 },
+  themeSwatchBtn: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+    background: 'none', border: 'none', cursor: 'pointer', padding: 2, width: 60,
+  },
+  themeSwatch: {
+    width: 40, height: 40, borderRadius: '50%', display: 'flex',
+    alignItems: 'center', justifyContent: 'center',
+    border: '2px solid var(--border-strong)', boxSizing: 'border-box',
+    transition: 'transform 0.12s, border-color 0.12s, box-shadow 0.12s',
+  },
+  themeSwatchActive: {
+    border: '2px solid #1ed760',
+    boxShadow: '0 0 0 3px #1ed76030',
+    transform: 'scale(1.06)',
+  },
+  themeSwatchCheck: {
+    color: '#1ed760', fontSize: 15, fontWeight: 900,
+    textShadow: '0 1px 3px rgba(0,0,0,0.6), 0 0 4px rgba(255,255,255,0.5)',
+  },
+  themeSwatchLabel: {
+    color: 'var(--text-dim)', fontSize: 10.5, fontWeight: 700,
+    textAlign: 'center', lineHeight: 1.2,
   },
 
   emptyHint: { color: 'var(--text-dim)', fontSize: 13, margin: 0 },
