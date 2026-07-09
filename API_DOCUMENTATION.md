@@ -1,6 +1,6 @@
 ﻿# YFitops API Documentation
 
-> Servidor multiplataforma de música para Android, Windows, panel web administrativo y bots.
+> Servidor multiplataforma de música para Android, Windows, Linux, Samsung Smart TV, panel web administrativo y bots.
 
 ---
 

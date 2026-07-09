@@ -1,11 +1,12 @@
 # YFitops
 
-> Ecosistema multiplataforma de música: servidor backend, app de escritorio para Windows/Linux, app de Samsung Smart TV, panel web administrativo y bots. (Por ahora no se sube el código de la app móvil.)
+> Ecosistema multiplataforma de música: servidor backend, app de escritorio para Windows y Linux, app móvil para Android, panel web administrativo y bots.
 
 ---
 
 ## Índice
 
+- [Resumen](#resumen)
 - [Requisitos](#requisitos)
 - [Instalación](#instalación)
 - [Configuración](#configuración)
@@ -15,14 +16,16 @@
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Carpeta data/](#carpeta-data)
 - [App de escritorio (Windows y Linux)](#app-de-escritorio-windows-y-linux)
-- [App de Samsung TV (Tizen)](#app-de-samsung-tv-tizen)
-- [Canciones, portadas y playlists](#canciones-portadas-y-playlists)
+- [App móvil (Android)](#app-móvil-android)
 - [APIs](#apis)
 - [Seguridad](#seguridad)
 - [Sincronización de carpetas](#sincronización-de-carpetas)
+- [Canciones, portadas y playlists](#canciones-portadas-y-playlists)
 - [Estadísticas](#estadísticas)
 - [Scripts disponibles](#scripts-disponibles)
 - [Solución de problemas](#solución-de-problemas)
+- [Versiones](#versiones)
+- [Licencia](#licencia)
 
 ---
 
@@ -268,7 +271,38 @@ Esta es la ruta real del repositorio, tal cual queda en disco:
 yfitops/
 ├── API_DOCUMENTATION.md        # Documentación detallada de todos los endpoints (ver sección APIs)
 ├── README.md
-├── app/                        # App móvil (Android) — Próximamente
+├── yfitops-android/                         # App móvil (Android/iOS) — Expo + React Native
+│   ├── App.js                   # Componente raíz: sesión, splash, modal de novedades/actualización
+│   ├── app.json                 # Configuración de Expo (nombre, iconos, permisos, plugins)
+│   ├── eas.json                 # Perfiles de build de EAS (development/preview/production)
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── .env                     # EXPO_PUBLIC_SERVER_URL y secretos locales (no versionar)
+│   ├── assets/                  # icon.png, splash.png, adaptive-icon.png, favicon.png
+│   ├── plugins/
+│   │   └── withMusicForegroundService.js   # Config plugin: servicio en primer plano + botón de medios en Android
+│   └── src/
+│       ├── theme.js             # Los 11 temas de color (mismos que la app de PC) + contexto
+│       ├── i18n/
+│       │   ├── translations.js  # Textos ES/EN de toda la interfaz
+│       │   └── index.js         # Hook useT()
+│       ├── context/
+│       │   ├── MusicContext.js    # Estado global: sesión, biblioteca, reproductor (expo-av), notificación, heartbeat
+│       │   └── SettingsContext.js # Tema, idioma, foto de perfil, conectividad, descargas offline y caché
+│       ├── screens/
+│       │   ├── LoginScreen.js
+│       │   ├── MainScreen.js      # Tab bar: Inicio, Favoritos, Colecciones, Ajustes
+│       │   ├── SongsScreen.js
+│       │   ├── FavoritesScreen.js
+│       │   ├── PlaylistsScreen.js
+│       │   └── SettingsScreen.js  # Perfil, apariencia, descargas offline, almacenamiento, créditos, versión
+│       └── components/
+│           ├── Icon.js            # Iconos por emoji/texto (sin dependencias nativas de iconografía)
+│           ├── MarqueeText.js
+│           ├── PlayerBar.js
+│           ├── PlayerModal.js
+│           └── SongItem.js
+│
 ├── servidor/                   # Backend (Node.js + Express + MySQL)
 │   ├── server.js               # Punto de entrada del backend
 │   ├── package.json
@@ -302,70 +336,42 @@ yfitops/
 │   ├── node_modules/              # Dependencias (no versionar)
 │   └── web/                       # Panel administrativo React/Vite
 │
-├── yfitopspc/                   # App de escritorio Electron — genera tanto el instalador de Windows como el binario de Linux
-│   ├── main.js                  # Proceso principal de Electron
-│   ├── preload.js               # Puente seguro entre Electron y el renderer (contextBridge)
-│   ├── discordRpc.js            # Discord Rich Presence ("reproduciendo ahora")
-│   ├── webpack.config.js        # Bundler del renderer (React)
-│   ├── package.json
-│   ├── package-lock.json
-│   ├── assets/                  # Iconos de la app (.ico, etc.)
-│   ├── public/                  # Estáticos copiados tal cual al build (logo, index.html base)
-│   ├── dist/                    # Build del renderer generado por webpack (no versionar)
-│   ├── release/                 # Instaladores/ejecutables generados (no versionar)
-│   ├── node_modules/            # Dependencias (no versionar)
-│   └── src/                     # Código fuente del renderer (React)
-│       ├── index.html
-│       ├── index.jsx            # Punto de entrada de React
-│       ├── App.jsx              # Componente raíz, título custom, updates, changelog
-│       ├── api.js               # Llamadas a la API del servidor → /pc/*
-│       ├── store/
-│       │   └── MusicStore.js    # Estado global (zustand): auth, canciones, reproductor, heartbeat, Discord RPC
-│       └── components/
-│           ├── LoginScreen.jsx
-│           ├── Sidebar.jsx
-│           ├── SongsView.jsx
-│           ├── FavoritesView.jsx
-│           ├── PlaylistsView.jsx
-│           ├── PlayerBar.jsx
-│           └── PlayerModal.jsx
-│
-└── yfitops-samsungtv/            # App de Samsung Smart TV (Tizen) — navegador Tizen puro, sin Electron
-    ├── config.xml                # Manifiesto Tizen: id de la app, certificado, permisos de red
-    ├── icon.png                  # Icono de la app en el menú "Apps" de la TV
+└── yfitopspc/                   # App de escritorio Electron — genera tanto el instalador de Windows como el binario de Linux
+    ├── main.js                  # Proceso principal de Electron
+    ├── preload.js               # Puente seguro entre Electron y el renderer (contextBridge)
+    ├── discordRpc.js            # Discord Rich Presence ("reproduciendo ahora")
+    ├── localData.js             # Datos solo-locales: foto de perfil, canciones/playlists descargadas, caché
+    ├── autostart.js             # Inicio automático con el sistema (Windows/macOS nativo, Linux vía .desktop)
+    ├── webpack.config.js        # Bundler del renderer (React)
     ├── package.json
-    ├── webpack.config.js         # Bundler del renderer (React), target "web" en vez de "electron-renderer"
-    ├── public/
-    │   └── logo.png              # Logo dentro de la app (login y barra lateral)
-    ├── dist/                     # Build generado por webpack + proyecto Tizen listo para empaquetar (no versionar)
-    └── src/                      # Código fuente del renderer (React), adaptado de yfitopspc/src
-        ├── index.html
-        ├── index.jsx             # Punto de entrada de React; carga tv/tvBridge.js antes que nada
-        ├── App.jsx               # Componente raíz (sin barra de título, apps Tizen van a pantalla completa)
-        ├── api.js                # Llamadas a la API del servidor → /pc/* (mismo backend que yfitopspc)
-        ├── tv/
-        │   ├── tvBridge.js       # Sustituye window.electronAPI: sesión y foto de perfil vía localStorage
-        │   ├── tvNavigation.js   # Navegación espacial con el mando (flechas/OK) + teclas multimedia
-        │   └── backStack.js      # Pila de "capas" que se cierran con la tecla Atrás del mando
+    ├── package-lock.json
+    ├── assets/                  # Iconos de la app (.ico, etc.)
+    ├── public/                  # Estáticos copiados tal cual al build (logo, index.html base)
+    ├── dist/                    # Build del renderer generado por webpack (no versionar)
+    ├── release/                 # Instaladores/ejecutables generados (no versionar)
+    ├── node_modules/            # Dependencias (no versionar)
+    └── src/                     # Código fuente del renderer (React)
+        ├── index.html           # Variables CSS de los 11 temas de color
+        ├── index.jsx            # Punto de entrada de React
+        ├── App.jsx              # Componente raíz, título custom, updates, changelog, aviso sin conexión
+        ├── api.js               # Llamadas a la API del servidor → /pc/*
         ├── i18n/
-        │   ├── index.js
-        │   └── translations.js  # Sin las claves de autostart/descargas offline (funciones no existen aquí)
+        │   ├── translations.js  # Textos ES/EN de toda la interfaz
+        │   └── index.js         # Hook useT()
         ├── store/
-        │   ├── MusicStore.js    # Igual que en PC pero sin Discord RPC y sin reproducción desde disco (solo streaming)
-        │   └── SettingsStore.js # Igual que en PC pero sin descargas offline, caché ni autostart
+        │   ├── MusicStore.js    # Estado global (zustand): auth, canciones, reproductor, heartbeat, Discord RPC
+        │   └── SettingsStore.js # Tema, idioma, foto de perfil, conectividad, descargas offline, autoarranque
         └── components/
             ├── LoginScreen.jsx
             ├── Sidebar.jsx
             ├── SongsView.jsx
             ├── FavoritesView.jsx
             ├── PlaylistsView.jsx
-            ├── SettingsView.jsx  # Sin secciones de Sistema/Descargas/Almacenamiento
+            ├── SettingsView.jsx # Perfil, apariencia (11 temas), idioma, descargas offline, caché, créditos, versión
             ├── PlayerBar.jsx
             ├── PlayerModal.jsx
             └── QueueView.jsx
 ```
-
->  **`app/` (Android):** por ahora no se sube el código fuente de la app móvil. Se documentará y publicará más adelante.
 
 > El servidor guarda las carátulas de las canciones en `servidor/portadas/`. Es una carpeta más a tener en cuenta junto a `canciones/` y `playlist/` a la hora de hacer backups o desplegar.
 
@@ -524,124 +530,166 @@ sudo apt remove yfitops
 | Archivo/carpeta | Función |
 |---|---|
 | `main.js` | Proceso principal de Electron: crea la ventana (frameless, sin barra de título nativa), gestiona minimizar/maximizar/cerrar, persiste la sesión en disco (`session.json` dentro de `userData`) y expone los handlers IPC. |
-| `preload.js` | Puente seguro (`contextBridge`) entre el proceso principal y el renderer: expone `window.electronAPI` con controles de ventana, sesión y Discord RPC. |
+| `preload.js` | Puente seguro (`contextBridge`) entre el proceso principal y el renderer: expone `window.electronAPI` con controles de ventana, sesión, Discord RPC, foto de perfil, descargas offline, caché y autoarranque. |
 | `discordRpc.js` | Integración con Discord Rich Presence: muestra la canción que estás escuchando en tu perfil de Discord. |
+| `localData.js` | Todo lo que vive solo en el dispositivo: foto de perfil (nunca se sube al servidor), canciones y metadatos de playlists descargadas para offline, y gestión de esa caché. |
+| `autostart.js` | Registra o quita la app del arranque del sistema operativo (API nativa de Electron en Windows/macOS; archivo `.desktop` en `~/.config/autostart` en Linux). Activado por defecto la primera vez. |
 | `src/api.js` | Cliente HTTP hacia el backend, todo apuntando a `/pc/*` (login, canciones, favoritos, playlists, heartbeat, latencia, estado). |
-| `src/store/MusicStore.js` | Estado global de la app (zustand): sesión, reproductor de audio, cola de reproducción, favoritos, heartbeat cada 30s y sincronización con Discord RPC. |
-| `src/components/` | Vistas y componentes de la interfaz: login, sidebar, biblioteca, favoritos, colecciones, barra y modal del reproductor. |
+| `src/i18n/` | Diccionario de textos ES/EN y hook `useT()` para toda la interfaz (nombres de canciones/playlists nunca se traducen). |
+| `src/store/MusicStore.js` | Estado global de la app (zustand): sesión, reproductor de audio (con reproducción desde disco si la canción está descargada), cola de reproducción, favoritos, heartbeat cada 30s y sincronización con Discord RPC. |
+| `src/store/SettingsStore.js` | Tema (11 colores), idioma, foto de perfil, conectividad, descargas offline/caché y autoarranque. |
+| `src/components/` | Vistas y componentes de la interfaz: login, sidebar, biblioteca, favoritos, colecciones, ajustes, barra y modal del reproductor, cola de reproducción. |
 
 ### Notas de la app de escritorio
 
 - La sesión se guarda cifrada... bueno, en texto plano en `session.json` dentro de la carpeta `userData` de Electron; al abrir la app se valida el token contra `/pc/verify` y si no es válido se limpia sola.
 - El changelog que se ve al actualizar sale de `/pc/changelog`, que a su vez lee `data/actualizacion.json` → campo `pc` en el servidor.
 - La comprobación de versión (`/pc/version`) actualmente **no bloquea** el uso de la app si la versión local y la del servidor no coinciden; solo lo haría si se reactiva el bloqueo comentado en `App.jsx`.
+- La foto de perfil, las descargas offline y el idioma/tema elegidos son **solo locales**: viven en `userData` (Electron) o `localStorage`, nunca se sincronizan con el servidor ni con otros dispositivos.
+- El indicador de "sin conexión" usa los eventos `online`/`offline` del navegador (Chromium embebido), sin necesidad de hacer polling al servidor.
 
 ---
 
-## App de Samsung TV (Tizen)
+## App móvil (Android)
 
-La app de Samsung Smart TV (`yfitops-samsungtv/`) es un puerto de la app de escritorio adaptado a **Tizen** (el sistema de las Smart TV de Samsung). A diferencia de `yfitopspc/`, aquí **no hay Electron ni proceso Node**: es una app web pura (React + webpack) que corre dentro del navegador Tizen integrado en la TV, empaquetada como `.wgt`. Se conecta al mismo backend, por las mismas rutas `/pc/*`.
+La app móvil (`yfitops-android/`) es una aplicación **Expo + React Native** que vive junto a `servidor/` y `yfitopspc/`, dentro de la misma ruta del proyecto. Se conecta al backend a través de las rutas `/api/*` documentadas en [APIs](#apis) y en [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md).
 
-Probado sobre una Samsung serie N de 2018 (`required_version="4.0"` en `config.xml`); para modelos más nuevos con Tizen 5.5/6.0 no debería hacer falta tocar nada.
-
-### Diferencias respecto a `yfitopspc/`
-
-No tiene sentido llevar 1:1 todo lo de la app de PC a una TV, así que en `yfitops-samsungtv/` se ha quitado:
-
-- **Discord Rich Presence** (`discordRpc.js` no existe en esta versión).
-- **Inicio automático con el sistema** (una Smart TV no tiene "inicio de sesión de SO" al que engancharse).
-- **Descargas para escuchar sin conexión**: se asume que la TV siempre está conectada por red, así que siempre reproduce en streaming.
-- **Barra de título / minimizar / maximizar / cerrar**: las apps de Tizen TV van siempre a pantalla completa.
-
-Y se ha añadido:
-
-- **Navegación espacial con el mando** (`tv/tvNavigation.js`): las flechas mueven el foco entre botones, filas de canciones, tarjetas, etc.; "OK/Enter" activa lo enfocado.
-- **Tecla Atrás/Volver del mando** (`tv/backStack.js`): cierra el reproductor grande, la cola o el editor de canción, o vuelve de una colección a la lista; si no hay nada abierto, cierra la app.
-- **Botones multimedia del mando** (▶️⏸⏭⏮, si el mando los tiene), enganchados directamente a la reproducción.
-- **`tv/tvBridge.js`**: sustituye a `window.electronAPI` (que en PC expone `preload.js`) por una versión que guarda sesión y foto de perfil en `localStorage` en vez de en disco, ya que aquí no hay proceso Electron que escriba archivos.
+Comparte la misma filosofía que la app de PC: mismos 11 temas de color, mismo sistema de idiomas (ES/EN), descargas offline y foto de perfil solo-local. La única diferencia real de plataforma es que no tiene sentido un "inicio con el sistema" en un móvil, así que esa función no existe aquí.
 
 ### Requisitos
 
-- Node.js 18+.
-- [Tizen Studio](https://developer.tizen.org/development/tizen-studio/download) con el paquete **TV Extensions** instalado desde el Package Manager (trae las herramientas de línea de comandos `tizen` y `sdb` en `tools\ide\bin\`).
-- Un certificado de firma de Samsung (Tizen Studio → Certificate Manager) para instalar en una TV real fuera del modo de solo-emulador.
-- La TV en la misma red local que el PC, y en **modo desarrollador** (Apps → pulsar `12345` con el mando → Developer mode → ON → IP del PC).
+- Node.js 18+
+- Una cuenta de [Expo](https://expo.dev) (gratuita) para compilar con EAS Build
+- Para probar en desarrollo: la app **Expo Go** en tu móvil, o un emulador/dispositivo Android
 
-### Compilar el bundle web
+### Configuración
+
+Crea `app/.env` con la URL de tu servidor:
+
+```env
+EXPO_PUBLIC_SERVER_URL=https://tu-servidor.com
+```
+
+### Instalación y arranque en desarrollo
 
 ```bash
-cd yfitops-samsungtv
+cd yfitops-android
 npm install
-npm run build
+npx expo start
 ```
 
-Esto genera `dist/` con `index.html`, `bundle.js`, `config.xml` e `icon.png` — un proyecto Tizen completo, listo para empaquetar.
+Escanea el QR con la app **Expo Go** (Android) o pulsa `a` en la terminal para abrir en un emulador Android.
 
-### Empaquetar con la CLI de Tizen (`tizen package`)
+### Compilar el `.apk`
 
-En vez de pasar por la GUI de Tizen Studio (`Import` → `Run As`), se puede empaquetar directamente por línea de comandos apuntando al binario dentro de la instalación de Tizen Studio:
+La forma recomendada es **EAS Build**, el servicio de compilación en la nube de Expo — no necesitas Android Studio ni SDKs instalados localmente:
 
-```bat
-cd yfitops-samsungtv\dist
-C:\tizen-studio\tools\ide\bin\tizen package -t wgt
+```bash
+cd yfitops-android
+npm install -g eas-cli   # una sola vez
+eas login                # inicia sesión con tu cuenta de Expo
+eas build --platform android --profile preview
 ```
 
-Esto firma el paquete (con el certificado por defecto si no has configurado uno propio) y genera `YFitops.wgt` dentro de `dist/`. Si ves este aviso:
+El perfil `preview` (definido en `eas.json`) genera directamente un **`.apk`** instalable, en vez del `.aab` que pide la Play Store:
 
-```text
-WARNING: Default profile is used for sign. This signed package is valid for emulator test only.
+```json
+"preview": {
+  "distribution": "internal",
+  "android": { "buildType": "apk" },
+  "env": { "EXPO_PUBLIC_SERVER_URL": "https://tu-servidor.com" }
+}
 ```
 
-significa que se ha firmado con el certificado temporal (`tempMobile.p12`) que trae Tizen Studio por defecto — vale para emulador, pero para instalarlo en la TV real de forma consistente conviene crear tu propio perfil de autor en `Certificate Manager` (cuenta Samsung → `Create` → author certificate) y volver a empaquetar pasándole el perfil:
+Cuando termina (se compila en los servidores de Expo, no en tu máquina), la terminal te da un enlace de descarga directo del `.apk`. Súbelo a donde tengas alojado el resto de instaladores y actualiza `data/version.json` (`apkUrl`) para que la app avise sola de la actualización.
 
-```bat
-C:\tizen-studio\tools\ide\bin\tizen package -t wgt -s NOMBRE_DE_TU_PERFIL
+**Perfiles disponibles en `eas.json`:**
+
+| Perfil | Uso | Salida |
+|---|---|---|
+| `development` | Development client, para depurar con Metro conectado | Cliente de desarrollo instalable |
+| `preview` | Distribución interna, para probar sin pasar por Play Store | `.apk` |
+| `production` | Build final | `.aab` (formato que pide Google Play) |
+
+```bash
+# Build de producción para subir a Google Play
+eas build --platform android --profile production
 ```
 
-> Tip: añade `C:\tizen-studio\tools\ide\bin` a tu `PATH` de Windows para no tener que escribir la ruta completa cada vez.
+> Si en algún momento quieres compilar **localmente** sin depender de los servidores de Expo, necesitas Android Studio + el SDK de Android instalados, y entonces `eas build --platform android --profile preview --local` compila en tu propia máquina en vez de en la nube. Es más lento de preparar la primera vez, pero no depende de la cola de builds de Expo.
 
-### Conectar con la TV e instalar
+### Publicar la actualización
 
-```bat
-C:\tizen-studio\tools\ide\bin\sdb connect IP_DE_LA_TV
-```
+Igual que con el `.exe`/`AppImage` de PC: sube el `.apk` generado a donde lo sirvas (por ejemplo, `GET /app.apk` del panel web, ver [API web](#api-web-web) en `API_DOCUMENTATION.md`), y actualiza a mano:
 
-Por ejemplo:
-
-```bat
-C:\tizen-studio\tools\ide\bin\sdb connect 192.168.1.120
-```
-
-Comprueba que aparece en la lista de dispositivos:
-
-```bat
-C:\tizen-studio\tools\ide\bin\sdb devices
-```
-
-Y, cuando la TV aparezca ahí, instala el `.wgt` generado:
-
-```bat
-C:\tizen-studio\tools\ide\bin\tizen install -n YFitops.wgt
-```
-
-La app queda instalada y lista para abrirse desde el menú **Apps** de la TV. Para reinstalar tras cambios, repite: `npm run build` → `tizen package -t wgt` → `tizen install -n YFitops.wgt` (no hace falta reconectar con `sdb` si la conexión sigue activa).
+- `data/version.json` → campo `apkUrl` (y `version`, para que la app detecte que hay una nueva).
+- `data/actualizacion.json` → notas de la versión que se muestran en el modal "Novedades" al abrir la app.
 
 ### Piezas clave
 
 | Archivo/carpeta | Función |
 |---|---|
-| `config.xml` | Manifiesto Tizen: id de la app (10 caracteres del certificado + nombre), versión, `required_version` (4.0 para TVs de 2018), permisos de red (`<access origin="*" .../>`) y ajustes de pantalla completa. |
-| `webpack.config.js` | Igual que en `yfitopspc/` pero con `target: 'web'` (no `electron-renderer`) y copiando `config.xml` + `icon.png` a `dist/` para dejarlo listo como proyecto Tizen. |
-| `src/tv/tvBridge.js` | Sustituye `window.electronAPI`: sesión y foto de perfil en `localStorage` en vez de archivos en disco. |
-| `src/tv/tvNavigation.js` | Navegación espacial por mando (flechas → foco más cercano en esa dirección), atajo `focusableProps()` para convertir `<div onClick>` en algo enfocable, y enganche de las teclas multimedia del mando. |
-| `src/tv/backStack.js` | Pila de "capas" (modales/vistas) que se registran con `useTvBack(onClose)`; la tecla Atrás cierra siempre la de más arriba, o sale de la app si no hay ninguna abierta. |
-| `src/store/MusicStore.js` | Igual que en PC pero sin las llamadas a Discord RPC y sin la rama de reproducción desde archivo local descargado (aquí siempre se hace streaming desde el servidor). |
-| `src/store/SettingsStore.js` | Igual que en PC pero sin `launchOnStartup`, sin caché ni descargas offline (`downloadPlaylist`, `clearCache`, etc. no existen). |
+| `App.js` | Componente raíz: splash screen, verificación de sesión guardada, comprobación de versión/changelog contra `/api/version` y `/api/changelog`, banner de sin conexión. |
+| `app.json` | Configuración de Expo: nombre, iconos, permisos de Android (notificaciones, servicio en primer plano, arranque al encender), plugins. |
+| `eas.json` | Perfiles de compilación (`development`/`preview`/`production`) usados por EAS Build. |
+| `plugins/withMusicForegroundService.js` | Config plugin que añade al `AndroidManifest.xml` el servicio en primer plano de reproducción y el receptor de botones de medios (auriculares, notificación). |
+| `src/context/MusicContext.js` | Estado global del reproductor (`expo-av`): cola, favoritos, heartbeat, notificación con controles de reproducción, reacciona al estado real de reproducción (interrupciones, llamadas, otras apps) en vez de fiarse de temporizadores manuales, y reproduce desde disco si la canción está descargada. |
+| `src/context/SettingsContext.js` | Tema (11 colores), idioma, foto de perfil (solo local, vía `expo-file-system`), conectividad (`@react-native-community/netinfo`) y descargas offline/caché. |
+| `src/theme.js` | Las 11 paletas de color, iguales a las de la app de PC. |
+| `src/i18n/` | Textos ES/EN de toda la interfaz. |
+| `src/screens/` | Pantallas: login, biblioteca, favoritos, colecciones, ajustes. |
+| `src/components/` | Barra y modal del reproductor, fila de canción, texto con marquesina para títulos largos, iconos. |
 
-### Notas de la app de TV
+### Notas de la app móvil
 
-- El `id`/`package` de `tizen:application` en `config.xml` viene con un placeholder de 10 caracteres; hay que sustituirlo por el que te asigne tu propio certificado de autor antes de firmar para un uso más allá de pruebas puntuales.
-- La foto de perfil vive en el `localStorage` del navegador Tizen de esa TV en concreto (no en un archivo ni en el servidor); si restauras la TV a fábrica, se pierde igual que se perdería la sesión.
+- La foto de perfil y las canciones/playlists descargadas para offline se guardan con `expo-file-system` en el almacenamiento propio de la app — nunca se suben al servidor ni son visibles para otras apps.
+- El reproductor comprueba primero si la canción está descargada en disco antes de hacer streaming; si no lo está, sigue funcionando igual que siempre mientras haya conexión.
+- La notificación de reproducción (con los controles de anterior/pausa/siguiente) se mantiene sincronizada con el estado real del audio nativo, así que también refleja correctamente pausas provocadas por el sistema (una llamada entrante, otra app tomando el audio, etc.), no solo las que inicia el usuario desde la app.
+- El indicador de "sin conexión" usa `@react-native-community/netinfo`, que reacciona a cambios de red en tiempo real sin necesidad de peticiones de comprobación.
+
+---
+
+## APIs
+
+La documentación completa de cada endpoint, con parámetros, cuerpos de petición y ejemplos de respuesta, está en [API_DOCUMENTATION.md](./API_DOCUMENTATION.md).
+
+| Prefijo | Plataforma | Autenticación | Duración de sesión |
+|---|---|---|---|
+| `/api/` | Android | Bearer token | 30 días |
+| `/pc/` | Windows | Bearer token | 30 días |
+| `/web/` | Panel admin | Cookie JWT | 3 días |
+| `/bot/` | Bots | API key | — |
+
+### Flujo de autenticación
+
+1. El cliente envía credenciales al endpoint de login de su plataforma.
+2. El servidor verifica el hash de la contraseña.
+3. El servidor emite un JWT (o cookie `web_token` para el panel web).
+4. El cliente incluye el token en cada petición: `Authorization: Bearer <token>`.
+5. El middleware valida el token antes de ejecutar el handler.
+
+---
+
+## Seguridad
+
+- Contraseñas hasheadas con SHA-256 + salt.
+- Tokens JWT con expiración configurable.
+- CORS habilitado para múltiples orígenes.
+- Validación de tipo y tamaño de archivo en subidas.
+- Middlewares de autenticación en todas las rutas protegidas.
+- Acceso al panel web restringido a rol `superadmin`.
+
+---
+
+## Sincronización de carpetas
+
+El servidor vigila automáticamente `/playlist/` y `/canciones/`. Cualquier cambio se detecta en tiempo real sin necesidad de reiniciar.
+
+Para forzar una sincronización manual desde el cliente:
+
+```http
+POST /api/sync
+```
 
 ---
 
@@ -767,53 +815,17 @@ El servidor registra automáticamente por usuario:
 
 ## Scripts disponibles
 
-> **Importante:** Todos los comandos deben ejecutarse desde la carpeta de la aplicación correspondiente, **no desde la raíz del proyecto**.
-
-# Servidor (`yfitops-server`)
-
 | Script | Descripción |
-| --- | --- |
-| `npm start` | Inicia el servidor. |
-| `npm run dev` | Inicia el servidor en modo desarrollo. |
-| `npm run migrate` | Ejecuta la migración de datos a MySQL. |
-| `npm run final-fix` | Ejecuta el script de corrección final de la base de datos. |
-| `npm run web:install` | Instala las dependencias del panel web. |
-| `npm run web:dev` | Inicia el panel web en modo desarrollo. |
-| `npm run web:build` | Genera la versión de producción del panel web. |
-
----
-
-# Aplicación de escritorio (`yfitops-pc`)
-
-| Script | Descripción |
-| --- | --- |
-| `npm start` | Compila la aplicación en modo desarrollo y la inicia con Electron. |
-| `npm run watch` | Inicia la aplicación en modo desarrollo con recompilación automática (Webpack Watch). |
-| `npm run build` | Genera la compilación de producción. |
-| `npm run dist` | Genera el instalador de Windows (`.exe`). |
-| `npm run dist:linux` | Genera los instaladores para Linux (`AppImage` y `.deb`). |
-| `npm run dist:all` | Genera los instaladores para Windows y Linux. |
-
----
-
-# Aplicación de Samsung TV (`yfitops-samsungtv`)
-
-| Script | Descripción |
-| --- | --- |
-| `npm run build` | Compila el renderer (React) a `dist/`, dejando ahí un proyecto Tizen completo (junto a `config.xml` e `icon.png`). |
-
-Empaquetado e instalación en la TV: no son scripts de `npm`, se hacen con la CLI de Tizen Studio (`tizen package`, `sdb connect`, `tizen install`) — ver la sección [App de Samsung TV (Tizen)](#app-de-samsung-tv-tizen).
-
----
-
-# Aplicación móvil (`yfitops-android`)
-
-| Script | Descripción |
-| --- | --- |
-| `npm start` | Inicia el proyecto con Expo (Metro Bundler). |
-| `npm run android` | Compila e inicia la aplicación en un emulador o dispositivo Android conectado. |
-| `npm run ios` | Compila e inicia la aplicación en un simulador o dispositivo iOS conectado. |
-| `npm run web` | Inicia la aplicación en modo web mediante Expo. |
+|---|---|
+| `npm start` | Inicia el servidor en modo producción |
+| `npm run dev` | Desarrollo con nodemon (reinicio automático) |
+| `npm run validate` | Valida la configuración del entorno |
+| `npm run web:install` | Instala dependencias del panel web |
+| `npm run web:dev` | Panel web en modo desarrollo con hot-reload |
+| `npm run web:build` | Build del panel web para producción |
+| `npm run dist:linux` | Build de los archivos de instalación para linux |
+| `npm run dist:all` | Build tanto de los archivos linux como windows |
+| `npm run dist`  | Build para crear el .exe |
 
 ---
 
@@ -840,11 +852,18 @@ npm run validate    # Validar configuración
 POST /api/sync
 ```
 
-**La app de Samsung TV no conecta por `sdb`**
+---
 
-- Comprueba que la TV está en **modo desarrollador** (Apps → `12345` → Developer mode → ON) y que tiene configurada la IP de tu PC.
-- Verifica que el PC y la TV están en la misma red/VLAN (algunos routers aíslan la red de invitados).
-- Si `sdb devices` no muestra la TV tras `sdb connect IP_DE_LA_TV`, reinicia la TV y vuelve a intentarlo; a veces el demonio `sdb` del propio Tizen Studio también ayuda reiniciarlo con `sdb kill-server && sdb start-server`.
+## Versiones
+
+| Componente | Versión |
+|---|---|
+| Servidor | 2.0.0 |
+| App Móvil (Android) | 2.0.0 |
+| App de escritorio (PC) | 1.1.0 |
+| Web | 2.0.0 |
+
+> Estas versiones son las que se comparan contra `data/version.json` para avisar de actualizaciones disponibles, y contra `data/actualizacion.json` para mostrar el changelog correspondiente a cada plataforma.
 
 ---
 
@@ -852,4 +871,4 @@ POST /api/sync
 
 Privada — YFitops 2026
 
-*Última actualización: 8 de julio de 2026*
+*Última actualización: 9 de julio de 2026*

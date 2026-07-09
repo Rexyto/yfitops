@@ -1,4 +1,4 @@
-// autostart.js
+
 // Gestiona el arranque automático de la app con el sistema operativo.
 // Windows/macOS usan la API nativa de Electron; en Linux se registra
 // mediante un archivo .desktop en ~/.config/autostart (estándar XDG).
@@ -52,13 +52,13 @@ function applyAutostart(enabled) {
     applyLinuxAutostart(enabled);
   } else {
     try {
-      app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath });
+      const args = app.isPackaged ? [] : [app.getAppPath()];
+      app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath, args });
     } catch {}
   }
 }
 
-// Se llama una vez al arrancar la app: aplica el valor guardado y, si es
-// la primera vez que se ejecuta la app, lo activa por defecto (ON).
+
 function initAutostart() {
   const settings = readSettings();
   if (typeof settings.launchOnStartup !== 'boolean') {
