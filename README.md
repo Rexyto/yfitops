@@ -1037,21 +1037,8 @@ POST /api/sync
 
 ---
 
-## Versiones
-
-| Componente | Versión |
-|---|---|
-| Servidor | 2.0.0 |
-| App Móvil (Android) | 2.0.0 |
-| App de escritorio (PC) | 1.1.0 |
-| Web | 2.0.0 |
-
-> Estas versiones son las que se comparan contra `data/version.json` para avisar de actualizaciones disponibles, y contra `data/actualizacion.json` para mostrar el changelog correspondiente a cada plataforma.
-
----
-
 ## Licencia
 
 Privada — YFitops 2026
 
-*Última actualización: 9 de julio de 2026*
+*Última actualización: 10 de julio de 2026*
