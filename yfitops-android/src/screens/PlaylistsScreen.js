@@ -33,13 +33,20 @@ const fmtTotal = (secs) => {
 };
 
 // ── Fila de canción en playlist ───────────────────────────────
-function PlaylistSongRow({ item, index, isActive, onPress, onFavoritePress, isFavorite, SERVER_URL, color = '#1ed760' }) {
+function PlaylistSongRow({ item, index, isActive, onPress, onFavoritePress, isFavorite, SERVER_URL, color = '#1ed760', onQueuePress }) {
   const { colors } = useTheme();
   const { downloadedSongIds } = useSettings();
   const t = useT();
   const styles = makeStyles(colors);
   const cover = item.coverUrl ? `${SERVER_URL}${item.coverUrl}` : null;
   const isDownloaded = downloadedSongIds.includes(String(item.id));
+  const [justQueued, setJustQueued] = useState(false);
+
+  const handleQueuePress = () => {
+    onQueuePress?.();
+    setJustQueued(true);
+    setTimeout(() => setJustQueued(false), 900);
+  };
 
   return (
     <TouchableOpacity
@@ -79,6 +86,15 @@ function PlaylistSongRow({ item, index, isActive, onPress, onFavoritePress, isFa
           {item.artist} · {fmtDur(item.duration)}
         </Text>
       </View>
+
+      {/* Cola */}
+      {onQueuePress && (
+        <TouchableOpacity onPress={handleQueuePress} style={{ padding: 8 }}>
+          <Text style={{ color: justQueued ? '#1ed760' : colors.textFaint, fontSize: 17, fontWeight: '700' }}>
+            {justQueued ? '✓' : '+'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Favorito */}
       <TouchableOpacity onPress={onFavoritePress} style={{ padding: 8 }}>
@@ -227,7 +243,7 @@ export default function PlaylistsScreen() {
   const {
     playlists, songs, createPlaylist, deletePlaylist, updatePlaylist,
     playSong, favorites, toggleFavorite, SERVER_URL, folderPlaylists,
-    currentSong, isPlaying,
+    currentSong, isPlaying, addToQueue,
   } = useContext(MusicContext);
   const { isPlaylistDownloaded } = useSettings();
   const { colors } = useTheme();
@@ -340,6 +356,7 @@ export default function PlaylistsScreen() {
                 isActive={isActive} isPlaying={isPlaying && isActive}
                 onPress={() => playSong(item, filteredSongs.length > 0 ? filteredSongs : allPlSongs)}
                 onFavoritePress={() => toggleFavorite(item.id)}
+                onQueuePress={() => addToQueue(item)}
                 isFavorite={favorites.includes(item.id)}
                 SERVER_URL={SERVER_URL} color={color}
               />
@@ -418,6 +435,7 @@ export default function PlaylistsScreen() {
                 isActive={isActive} isPlaying={isPlaying && isActive}
                 onPress={() => playSong(item, filteredFolderSongs.length > 0 ? filteredFolderSongs : plSongs)}
                 onFavoritePress={() => toggleFavorite(item.id)}
+                onQueuePress={() => addToQueue(item)}
                 isFavorite={favorites.includes(item.id)}
                 SERVER_URL={SERVER_URL} color="#1ed760"
               />

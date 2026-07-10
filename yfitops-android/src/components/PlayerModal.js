@@ -1,17 +1,19 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { View, Text, StyleSheet, Image, Alert, SafeAreaView, StatusBar, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import * as ImagePicker from 'expo-image-picker';
 import Icon from './Icon';
+import QueueView from './QueueView';
 import { MusicContext } from '../context/MusicContext';
 import { useTheme } from '../theme';
 import { useT } from '../i18n';
 
 export default function PlayerModal({ onClose }) {
-  const { currentSong, isPlaying, position, duration, isLooping, pauseSong, resumeSong, playNext, playPrevious, seekTo, toggleLoop, toggleFavorite, favorites, uploadCover, SERVER_URL, setPosition } = useContext(MusicContext);
+  const { currentSong, isPlaying, position, duration, isLooping, pauseSong, resumeSong, playNext, playPrevious, seekTo, toggleLoop, toggleFavorite, favorites, uploadCover, SERVER_URL, setPosition, queue } = useContext(MusicContext);
   const { colors } = useTheme();
   const t = useT();
   const styles = makeStyles(colors);
+  const [queueVisible, setQueueVisible] = useState(false);
 
   if (!currentSong) return null;
 
@@ -43,8 +45,17 @@ export default function PlayerModal({ onClose }) {
           <Icon name="chevron-down" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerLabel}>{t('player.nowPlaying')}</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity onPress={() => setQueueVisible(true)} style={styles.headerBtn}>
+          <Icon name="list-outline" size={20} color={colors.text} />
+          {queue.length > 0 && (
+            <View style={styles.queueBadge}>
+              <Text style={styles.queueBadgeText}>{queue.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
+
+      <QueueView visible={queueVisible} onClose={() => setQueueVisible(false)} />
 
       <View style={styles.coverWrap}>
         {cover
@@ -115,7 +126,12 @@ export default function PlayerModal({ onClose }) {
 const makeStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg0 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
-  headerBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg3, borderRadius: 20 },
+  headerBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg3, borderRadius: 20, position: 'relative' },
+  queueBadge: {
+    position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#1ed760', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3,
+  },
+  queueBadgeText: { color: '#000', fontSize: 10, fontWeight: '800' },
   headerLabel: { color: c.textFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
   coverWrap: { marginHorizontal: 28, borderRadius: 16, overflow: 'hidden', aspectRatio: 1, backgroundColor: c.bg2, elevation: 12, shadowColor: '#1ed760', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, position: 'relative' },
   cover: { width: '100%', height: '100%' },

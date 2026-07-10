@@ -8,7 +8,7 @@ import { useTheme } from '../theme';
 import { useT } from '../i18n';
 
 export default function SongsScreen() {
-  const { songs, playSong, uploadSong, deleteSong, toggleFavorite, favorites, currentSong, SERVER_URL, onLogout, fetchSongs, activeListeners, fetchListeners } = useContext(MusicContext);
+  const { songs, playSong, uploadSong, deleteSong, toggleFavorite, favorites, currentSong, SERVER_URL, onLogout, fetchSongs, activeListeners, fetchListeners, addToQueue } = useContext(MusicContext);
   const { downloadedSongIds } = useSettings();
   const { colors } = useTheme();
   const t = useT();
@@ -18,6 +18,7 @@ export default function SongsScreen() {
   const [search, setSearch] = useState('');
   const [selectedSong, setSelectedSong] = useState(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [queuedId, setQueuedId] = useState(null);
 
   const filtered = search.trim()
     ? songs.filter(s => s.title.toLowerCase().includes(search.toLowerCase()) || s.artist.toLowerCase().includes(search.toLowerCase()))
@@ -93,6 +94,14 @@ export default function SongsScreen() {
           </View>
           <Text style={styles.songArtist} numberOfLines={1}>{item.artist} · {fmt(item.duration)}</Text>
         </View>
+        <TouchableOpacity
+          onPress={() => { addToQueue(item); setQueuedId(item.id); setTimeout(() => setQueuedId(null), 900); }}
+          style={styles.favBtn}
+        >
+          <Text style={{ color: queuedId === item.id ? '#1ed760' : colors.textFaint, fontSize: 17, fontWeight: '700' }}>
+            {queuedId === item.id ? '✓' : '+'}
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => toggleFavorite(item.id)} style={styles.favBtn}>
           <Icon name={isFav ? 'heart' : 'heart-outline'} size={18} color={isFav ? '#1ed760' : colors.textDim} />
         </TouchableOpacity>

@@ -8,7 +8,7 @@ import { useTheme } from '../theme';
 import { useT } from '../i18n';
 
 export default function SongItem({ song, isFavorite, onPress, onLongPress, onFavoritePress }) {
-  const { updateSong, uploadCover, SERVER_URL } = useContext(MusicContext);
+  const { updateSong, uploadCover, SERVER_URL, addToQueue } = useContext(MusicContext);
   const { downloadedSongIds } = useSettings();
   const { colors } = useTheme();
   const t = useT();
@@ -18,8 +18,15 @@ export default function SongItem({ song, isFavorite, onPress, onLongPress, onFav
   const [editArtist, setEditArtist] = useState(song.artist);
   const [editAlbum, setEditAlbum] = useState(song.album);
   const [saving, setSaving] = useState(false);
+  const [justQueued, setJustQueued] = useState(false);
 
   const isDownloaded = downloadedSongIds.includes(String(song.id));
+
+  const handleQueuePress = () => {
+    addToQueue(song);
+    setJustQueued(true);
+    setTimeout(() => setJustQueued(false), 900);
+  };
 
   const fmt = (s) => {
     if (!s || s < 1) return '--:--';
@@ -60,6 +67,9 @@ export default function SongItem({ song, isFavorite, onPress, onLongPress, onFav
           </View>
           <Text style={styles.sub}>{song.artist} · {fmt(song.duration)}</Text>
         </View>
+        <TouchableOpacity onPress={handleQueuePress} style={styles.editBtn}>
+          <Text style={{ color: justQueued ? '#1ed760' : colors.textFaint, fontSize: 16, fontWeight: '700' }}>{justQueued ? '✓' : '+'}</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setEditVisible(true)} style={styles.editBtn}>
           <Text style={{ color: colors.textFaint, fontSize: 14 }}>✎</Text>
         </TouchableOpacity>

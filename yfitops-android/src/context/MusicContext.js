@@ -109,6 +109,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   const [currentIndex, setCurrentIndex]       = useState(0);
   const [currentPlaylist, setCurrentPlaylist] = useState([]);
   const [activeListeners, setActiveListeners] = useState(0);
+  const [queue, setQueue]                     = useState([]); // Cola de reproducción, independiente de currentPlaylist
 
   const sound              = useRef(null);
   const nextSound          = useRef(null);
@@ -125,6 +126,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   const durationRef        = useRef(0);
   const endTimerRef        = useRef(null);
   const advancedRef        = useRef(false);
+  const queueRef           = useRef([]);
 
   // ── Guard anti doble-play ─────────────────────────────────────
   // Cada llamada a playSong recibe un token único.
@@ -136,6 +138,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
+  useEffect(() => { queueRef.current = queue; }, [queue]);
 
   const tokenRef = useRef(token);
   useEffect(() => { tokenRef.current = token; }, [token]);
@@ -241,6 +244,17 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     }
 
     const pl = currentPlaylistRef.current;
+
+    // La cola de reproducción tiene prioridad sobre la playlist actual,
+    // igual que en la app de PC: si hay algo en cola, se reproduce eso.
+    if (queueRef.current.length > 0) {
+      const [next, ...rest] = queueRef.current;
+      setQueue(rest);
+      queueRef.current = rest;
+      advancedRef.current = false;
+      await playSong(next, pl.length ? pl : [next]);
+      return;
+    }
 
     // Canción suelta (sin playlist real) o playlist vacía: no hay
     // "siguiente" a la que saltar. Antes esto repetía la misma canción
@@ -359,17 +373,54 @@ export const MusicProvider = ({ children, token, onLogout }) => {
       } catch {}
     }, 30000);
 
+    // Vigilante de fin de canción: además del evento nativo "didJustFinish"
+    // y del temporizador de seguridad, comprobamos el estado real cada 10s.
+    // Con la pantalla apagada, a veces el aviso de fin de canción no llega
+    // a tiempo (o nada) — este intervalo sigue corriendo igualmente y coge
+    // esos casos, en vez de dejar la canción "colgada" hasta que alguien
+    // desbloquee el móvil.
+    const watchdogInterval = setInterval(async () => {
+      if (!sound.current || advancedRef.current) return;
+      try {
+        const status = await sound.current.getStatusAsync();
+        if (!status.isLoaded) return;
+        const reachedEnd = status.didJustFinish
+          || (status.durationMillis > 0 && status.positionMillis >= status.durationMillis - 400 && !status.isPlaying);
+        if (reachedEnd) doAdvance();
+      } catch {}
+    }, 10000);
+
     // Al minimizar o volver a abrir la app, resincroniza la notificación
     // con el estado real — antes esto no pasaba nunca de forma explícita,
     // así que si algo se había desincronizado (p.ej. tras una interrupción
     // de audio) la notificación se quedaba con datos obsoletos.
-    const appStateSub = AppState.addEventListener('change', (nextState) => {
+    const appStateSub = AppState.addEventListener('change', async (nextState) => {
       if (nextState === 'active' || nextState === 'background') {
         if (currentSongRef.current) {
           updateNotification(currentSongRef.current, isPlayingRef.current);
         } else {
           dismissNotification();
         }
+      }
+
+      // Al volver a primer plano (pantalla desbloqueada, app reabierta):
+      // con la pantalla apagada, Android puede llegar a congelar los
+      // temporizadores JS y no entregar el último "didJustFinish" a tiempo,
+      // así que la canción se queda "colgada" en el final aunque el audio
+      // nativo ya haya terminado. Al volver, comprobamos el estado real del
+      // sonido directamente y forzamos el avance si hace falta, en vez de
+      // fiarnos de que el aviso nos llegara mientras estaba en segundo plano.
+      if (nextState === 'active' && sound.current) {
+        try {
+          const status = await sound.current.getStatusAsync();
+          if (status.isLoaded) {
+            const reachedEnd = status.didJustFinish
+              || (status.durationMillis > 0 && status.positionMillis >= status.durationMillis - 400 && !status.isPlaying);
+            if (reachedEnd && !advancedRef.current) {
+              doAdvance();
+            }
+          }
+        } catch {}
       }
     });
 
@@ -378,6 +429,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
       appStateSub.remove();
       clearInterval(syncInterval);
       clearInterval(heartbeatInterval);
+      clearInterval(watchdogInterval);
       if (endTimerRef.current) clearTimeout(endTimerRef.current);
       flushPlayTime(currentSongRef.current?.id);
       sound.current?.unloadAsync().catch(() => {});
@@ -531,6 +583,15 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   };
 
   const playNext = async () => {
+    // La cola tiene prioridad, igual que al terminar una canción sola.
+    if (queueRef.current.length > 0) {
+      const [next, ...rest] = queueRef.current;
+      setQueue(rest);
+      queueRef.current = rest;
+      const pl = currentPlaylistRef.current;
+      await playSong(next, pl.length ? pl : [next]);
+      return;
+    }
     const pl = currentPlaylistRef.current;
     if (pl.length > 0) { const n = (currentIndexRef.current + 1) % pl.length; currentIndexRef.current = n; setCurrentIndex(n); await playSong(pl[n], pl); }
   };
@@ -538,6 +599,43 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   const playPrevious = async () => {
     const pl = currentPlaylistRef.current;
     if (pl.length > 0) { const p = currentIndexRef.current === 0 ? pl.length - 1 : currentIndexRef.current - 1; currentIndexRef.current = p; setCurrentIndex(p); await playSong(pl[p], pl); }
+  };
+
+  // ── Cola de reproducción ──────────────────────────────────────
+  const addToQueue = (song) => {
+    setQueue(prev => [...prev, song]);
+  };
+
+  const addManyToQueue = (songsToAdd) => {
+    setQueue(prev => [...prev, ...songsToAdd]);
+  };
+
+  const removeFromQueue = (index) => {
+    setQueue(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearQueue = () => setQueue([]);
+
+  const moveQueueItem = (fromIndex, toIndex) => {
+    setQueue(prev => {
+      if (toIndex < 0 || toIndex >= prev.length) return prev;
+      const q = [...prev];
+      const [item] = q.splice(fromIndex, 1);
+      q.splice(toIndex, 0, item);
+      return q;
+    });
+  };
+
+  // Reproduce inmediatamente una canción concreta de la cola y la quita de ahí
+  const playFromQueue = async (index) => {
+    const current = queueRef.current;
+    const song = current[index];
+    if (!song) return;
+    const rest = current.filter((_, i) => i !== index);
+    setQueue(rest);
+    queueRef.current = rest;
+    const pl = currentPlaylistRef.current;
+    await playSong(song, pl.length ? pl : [song]);
   };
 
   const seekTo = async (value) => {
@@ -667,6 +765,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
       uploadSong, deleteSong, updateSong, uploadCover, fetchSongs, syncSongs,
       getFilteredSongs, getAllSongs, SERVER_URL, onLogout, activeListeners, fetchListeners,
       folderPlaylists, fetchFolderPlaylists,
+      queue, addToQueue, addManyToQueue, removeFromQueue, clearQueue, moveQueueItem, playFromQueue,
     }}>
       {children}
     </MusicContext.Provider>

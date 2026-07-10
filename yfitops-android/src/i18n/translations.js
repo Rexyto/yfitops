@@ -72,6 +72,21 @@ const es = {
 
   // Reproductor
   'player.nowPlaying': 'REPRODUCIENDO',
+  'player.queue': 'Cola de reproducción',
+
+  // Cola de reproducción
+  'queue.title': 'Cola de reproducción',
+  'queue.waiting': (n) => `${n} en espera`,
+  'queue.nowPlayingLabel': 'REPRODUCIENDO AHORA',
+  'queue.clear': 'Vaciar cola',
+  'queue.moveUp': 'Subir',
+  'queue.moveDown': 'Bajar',
+  'queue.remove': 'Quitar de la cola',
+  'queue.playNow': 'Reproducir ahora',
+  'queue.close': 'Cerrar',
+  'queue.empty': 'Cola vacía',
+  'queue.emptyHint': 'Agrega canciones con el botón "+" de cualquier lista',
+  'songs.addToQueue': 'Agregar a la cola',
 
   // Ajustes
   'settings.title': 'Ajustes',
@@ -214,6 +229,21 @@ const en = {
   'song.updated': 'Image updated',
 
   'player.nowPlaying': 'NOW PLAYING',
+  'player.queue': 'Playback queue',
+
+  // Playback queue
+  'queue.title': 'Playback queue',
+  'queue.waiting': (n) => `${n} waiting`,
+  'queue.nowPlayingLabel': 'NOW PLAYING',
+  'queue.clear': 'Clear queue',
+  'queue.moveUp': 'Move up',
+  'queue.moveDown': 'Move down',
+  'queue.remove': 'Remove from queue',
+  'queue.playNow': 'Play now',
+  'queue.close': 'Close',
+  'queue.empty': 'Queue is empty',
+  'queue.emptyHint': 'Add songs using the "+" button on any list',
+  'songs.addToQueue': 'Add to queue',
 
   'settings.title': 'Settings',
   'settings.subtitle': 'Application preferences',
