@@ -8,6 +8,7 @@ import Sidebar from './components/Sidebar';
 import SongsView from './components/SongsView';
 import FavoritesView from './components/FavoritesView';
 import PlaylistsView from './components/PlaylistsView';
+import ProfileView from './components/ProfileView';
 import SettingsView from './components/SettingsView';
 import PlayerBar from './components/PlayerBar';
 
@@ -179,6 +180,7 @@ export default function App() {
     if (tab === 'songs')     return <SongsView />;
     if (tab === 'favorites') return <FavoritesView />;
     if (tab === 'playlists') return <PlaylistsView />;
+    if (tab === 'profile')   return <ProfileView />;
     if (tab === 'settings')  return <SettingsView appVersion={appVersion} />;
     return null;
   };

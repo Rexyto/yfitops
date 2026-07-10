@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import useMusicStore from '../store/MusicStore';
 import useSettingsStore, { THEMES } from '../store/SettingsStore';
 import { useT } from '../i18n';
@@ -15,7 +15,7 @@ function resolveSongsForPlaylist(playlist, type, allSongs) {
   return allSongs.filter(s => playlist.songs?.includes(s.id));
 }
 
-const SECTION_IDS = ['profile', 'appearance', 'system', 'downloads', 'storage', 'credits', 'version'];
+const SECTION_IDS = ['appearance', 'system', 'downloads', 'storage', 'credits', 'version'];
 
 // ── Sección genérica reutilizable ───────────────────────────
 const Section = React.forwardRef(function Section({ title, subtitle, children }, ref) {
@@ -94,39 +94,16 @@ export default function SettingsView({ appVersion }) {
   const { playlists, folderPlaylists, songs } = useMusicStore();
   const {
     theme, setTheme, language, setLanguage,
-    profilePicture, uploadProfilePicture, removeProfilePicture,
     isOnline, cacheBytes, cacheSizeLabel, clearCache, offlinePlaylists,
     launchOnStartup, setLaunchOnStartup,
   } = useSettingsStore();
   const t = useT();
 
-  const fileRef = useRef();
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
-  const sectionRefs = useRef({});
+  const sectionRefs = React.useRef({});
   const scrollTo = (id) => sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  const handlePicChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!['image/jpeg', 'image/jpg', 'image/png'].includes(file.type)) {
-      setError(t('settings.profile.errorType'));
-      return;
-    }
-    setError('');
-    setUploading(true);
-    try {
-      await uploadProfilePicture(file);
-    } catch (err) {
-      setError(err.message || t('settings.profile.errorGeneric'));
-    } finally {
-      setUploading(false);
-      e.target.value = '';
-    }
-  };
 
   const handleClearCache = async () => {
     if (!confirmClear) { setConfirmClear(true); return; }
@@ -137,7 +114,6 @@ export default function SettingsView({ appVersion }) {
   const totalOfflineCount = offlinePlaylists.length;
 
   const INDEX = [
-    { id: 'profile', icon: '👤', label: t('settings.index.profile') },
     { id: 'appearance', icon: '🎨', label: t('settings.index.appearance') },
     { id: 'system', icon: '🖥️', label: t('settings.index.system') },
     { id: 'downloads', icon: '⬇️', label: t('settings.index.downloads') },
@@ -169,40 +145,6 @@ export default function SettingsView({ appVersion }) {
         </nav>
 
         <div style={styles.sectionsCol}>
-          {/* Perfil */}
-          <Section
-            ref={el => (sectionRefs.current.profile = el)}
-            title={t('settings.profile.title')}
-            subtitle={t('settings.profile.subtitle')}
-          >
-            <div style={styles.profileRow}>
-              <div style={styles.avatarWrap}>
-                {profilePicture
-                  ? <img src={profilePicture} style={styles.avatarImg} alt="" />
-                  : <div style={styles.avatarEmpty}>👤</div>
-                }
-              </div>
-              <div style={styles.profileActions}>
-                <button style={styles.primaryBtn} onClick={() => fileRef.current?.click()} disabled={uploading}>
-                  {uploading ? t('settings.profile.uploading') : (profilePicture ? t('settings.profile.change') : t('settings.profile.upload'))}
-                </button>
-                {profilePicture && (
-                  <button style={styles.secondaryBtn} onClick={removeProfilePicture}>
-                    {t('settings.profile.remove')}
-                  </button>
-                )}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/png, image/jpeg"
-                  style={{ display: 'none' }}
-                  onChange={handlePicChange}
-                />
-              </div>
-            </div>
-            {error && <p style={styles.errorText}>{error}</p>}
-          </Section>
-
           {/* Apariencia */}
           <Section
             ref={el => (sectionRefs.current.appearance = el)}
@@ -377,22 +319,6 @@ const styles = {
   sectionTitle: { color: 'var(--text)', fontSize: 15, fontWeight: 800, margin: 0 },
   sectionSubtitle: { color: 'var(--text-dim)', fontSize: 12, display: 'block', marginTop: 4 },
   sectionBody: { display: 'flex', flexDirection: 'column', gap: 12 },
-
-  profileRow: { display: 'flex', alignItems: 'center', gap: 20 },
-  avatarWrap: { width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: '2px solid #1ed76055' },
-  avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  avatarEmpty: { width: '100%', height: '100%', background: 'var(--bg3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: 'var(--text-faint)' },
-  profileActions: { display: 'flex', gap: 10, flexWrap: 'wrap' },
-  errorText: { color: '#ff5555', fontSize: 13, margin: 0 },
-
-  primaryBtn: {
-    background: '#1ed760', border: 'none', borderRadius: 10,
-    padding: '10px 16px', color: '#000', fontWeight: 800, fontSize: 13, cursor: 'pointer',
-  },
-  secondaryBtn: {
-    background: 'var(--bg3)', border: '1px solid var(--border-strong)', borderRadius: 10,
-    padding: '10px 16px', color: 'var(--text)', fontWeight: 700, fontSize: 13, cursor: 'pointer',
-  },
 
   toggleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   toggleLabel: { color: 'var(--text)', fontSize: 14, fontWeight: 700 },

@@ -9,6 +9,13 @@ const isDev = !app.isPackaged;
 
 const tokenPath = path.join(app.getPath('userData'), 'session.json');
 
+// En Windows, sin esto la app puede identificarse como "Electron" en
+// notificaciones, agrupación de la barra de tareas y accesos directos
+// (incluido el de inicio automático). Debe fijarse lo antes posible.
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.yfitops.pc');
+}
+
 // Icono según plataforma: .ico solo lo renderiza bien Windows,
 // en Linux (barra de tareas, dock, alt-tab) hace falta un .png.
 const iconPath = process.platform === 'win32'
@@ -36,7 +43,9 @@ function createWindow() {
     height: 780,
     minWidth: 900,
     minHeight: 600,
+    title: 'YFitops',
     backgroundColor: '#0a0a0a',
+    show: false,
     // Sin titlebar nativa — usamos nuestra propia drag region en CSS
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
@@ -50,6 +59,10 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, 'dist', 'index.html'));
+
+  win.once('ready-to-show', () => {
+    win.show();
+  });
 
   if (isDev) {
     win.webContents.openDevTools({ mode: 'detach' });

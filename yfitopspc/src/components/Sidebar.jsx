@@ -8,6 +8,7 @@ const TAB_KEYS = [
   { key: 'songs',     labelKey: 'nav.songs',     icon: '⊞' },
   { key: 'favorites', labelKey: 'nav.favorites', icon: '♥' },
   { key: 'playlists', labelKey: 'nav.playlists', icon: '☰' },
+  { key: 'profile',   labelKey: 'nav.profile',   icon: '👤' },
   { key: 'settings',  labelKey: 'nav.settings',  icon: '⚙' },
 ];
 
