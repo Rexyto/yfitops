@@ -1327,4 +1327,4 @@ POST /api/sync
 
 Privada — YFitops 2026
 
-*Última actualización: 11 de julio de 2026*
+*Última actualización: 13 de julio de 2026*
