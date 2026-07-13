@@ -14,6 +14,7 @@ import UsersPage from './pages/UsersPage';
 import StatsPage from './pages/StatsPage';
 import VersionPage from './pages/VersionPage';
 import ApiKeysPage from './pages/ApiKeysPage';
+import AchievementsPage from './pages/AchievementsPage';
 import CreditsPage from './pages/CreditsPage';
 
 interface User {
@@ -21,7 +22,6 @@ interface User {
   role: 'superadmin' | 'user';
 }
 
-/* 🔥 Wrapper para proteger rutas */
 function ProtectedRoute({
   user,
   children
@@ -105,7 +105,7 @@ export default function App() {
           }
         />
 
-        {/* 🌐 PÁGINAS PÚBLICAS */}
+        {/*  PÁGINAS PÚBLICAS */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<LandingPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
@@ -113,7 +113,7 @@ export default function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
 
-        {/* 🔐 RUTAS PROTEGIDAS */}
+        {/*  RUTAS PROTEGIDAS */}
         <Route
           element={
             <ProtectedRoute user={user}>
@@ -126,6 +126,7 @@ export default function App() {
           <Route path="/users" element={<UsersPage user={user!} />} />
           <Route path="/stats" element={<StatsPage user={user!} />} />
           <Route path="/version" element={<VersionPage />} />
+          <Route path="/achievements" element={<AchievementsPage user={user!} />} />
           <Route path="/api-keys" element={<ApiKeysPage user={user!} />} />
           <Route path="/credits" element={<CreditsPage user={user!} />} />
 

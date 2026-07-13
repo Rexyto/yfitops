@@ -11,6 +11,8 @@ import PlaylistsView from './components/PlaylistsView';
 import ProfileView from './components/ProfileView';
 import SettingsView from './components/SettingsView';
 import PlayerBar from './components/PlayerBar';
+import AchievementToast from './components/AchievementToast';
+import RateLimitWarningToast from './components/RateLimitWarningToast';
 
 // Barra de título custom (frameless window)
 function TitleBar() {
@@ -188,6 +190,8 @@ export default function App() {
   return (
     <div style={styles.root}>
       <TitleBar />
+      <AchievementToast />
+      <RateLimitWarningToast />
       {!isOnline && <OfflineBanner />}
       <div style={styles.body}>
         <Sidebar tab={tab} setTab={setTab} />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import useMusicStore from '../store/MusicStore';
 import useSettingsStore from '../store/SettingsStore';
 import { useT } from '../i18n';
@@ -11,10 +11,26 @@ const fmt = (s) => {
 };
 
 export default function FavoritesView() {
-  const { songs, favorites, playSong, toggleFavorite, currentSong, playShuffle, addToQueue, addManyToQueue } = useMusicStore();
+  const { songs, folderPlaylists, favorites, playSong, toggleFavorite, currentSong, playShuffle, addToQueue, addManyToQueue } = useMusicStore();
   const { downloadedSongIds } = useSettingsStore();
   const t = useT();
-  const favSongs = songs.filter(s => favorites.includes(s.id));
+
+  // Un favorito puede ser una canción de la biblioteca principal (`songs`)
+  // o de una colección por carpeta (`folderPlaylists[].songs`) — antes
+  // sólo se buscaba en `songs`, así que cualquier favorito que sólo
+  // viviera dentro de una colección no aparecía nunca aquí aunque el
+  // corazón estuviera marcado. Se combinan ambas fuentes, sin duplicados.
+  const allSongsById = useMemo(() => {
+    const map = new Map(songs.map(s => [s.id, s]));
+    for (const playlist of folderPlaylists) {
+      for (const s of playlist.songs || []) {
+        if (!map.has(s.id)) map.set(s.id, s);
+      }
+    }
+    return map;
+  }, [songs, folderPlaylists]);
+
+  const favSongs = favorites.map(id => allSongsById.get(id)).filter(Boolean);
   const [queuedId, setQueuedId] = useState(null);
 
   const handleAddToQueue = (song, e) => {

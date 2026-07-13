@@ -3,6 +3,7 @@ import {
   pcFetchSongs, pcFetchFavorites, pcToggleFavorite,
   pcFetchPlaylists, pcFetchFolderPlaylists, pcUpdateSong,
   pcUploadCover, pcFetchListeners, pcHeartbeat, SERVER_URL,
+  pcFetchAchievements, pcFetchStats, pcClaimAchievement,
 } from '../api';
 
 function shuffle(arr) {
@@ -17,6 +18,19 @@ function shuffle(arr) {
 let _audio = null;
 let _heartbeatInterval = null;  // intervalo del heartbeat
 let _heartbeatStart = null;     // timestamp del último heartbeat, para calcular elapsedMs
+
+// playSong ya manda su propio heartbeat explícito (con el tiempo escuchado
+// de la canción anterior incluido). El audio nuevo dispara igualmente su
+// evento 'play' justo después, y sin este flag ese evento mandaría UN
+// SEGUNDO heartbeat casi al mismo tiempo para el mismo cambio de canción:
+// dos peticiones concurrentes que, si el servidor las procesaba a la vez,
+// podían contarse las dos como "nueva reproducción" (canción/logro
+// duplicados). Con el flag, el próximo evento 'play' de un audio recién
+// creado por playSong se ignora (el estado sí se actualiza, solo se omite
+// el heartbeat) porque ya se mandó explícitamente. Un resume normal
+// (resumeSong) no toca este flag, así que sigue mandando su heartbeat
+// desde el propio evento 'play', como siempre.
+let _suppressNextPlayHeartbeat = false;
 
 // ── Discord Rich Presence ───────────────────────────────────
 function sanitizeForDiscord(text, maxLen = 128) {
@@ -47,12 +61,22 @@ function updateDiscordPresence(song, { paused = false } = {}) {
 // ── Heartbeat ────────────────────────────────────────────────
 // Llama al servidor cada 30s mientras hay canción reproduciéndose.
 // Envía: songId, isPlaying, elapsedMs (tiempo real escuchado desde el último beat)
+// Cuando el servidor detecta que se están mandando peticiones muy seguido
+// (sin llegar todavía al bloqueo de verdad) manda un aviso amistoso en la
+// propia respuesta del heartbeat. Se muestra como un toast normal, sin
+// cortar nada: es solo un "oye, más despacio" antes de que el rate limit
+// real entre en acción.
+function handleRateLimitWarning(warning) {
+  if (!warning) return;
+  useMusicStore.setState({ rateLimitWarning: { message: warning, _toastId: `warn-${Date.now()}` } });
+}
+
 function startHeartbeat(getState) {
   stopHeartbeat();
   _heartbeatStart = Date.now();
 
   _heartbeatInterval = setInterval(async () => {
-    const { token, currentSong, isPlaying } = getState();
+    const { token, currentSong, isPlaying, currentPlaylistContext } = getState();
     if (!token) return;
 
     const now = Date.now();
@@ -64,10 +88,14 @@ function startHeartbeat(getState) {
         songId: currentSong?.id || null,
         isPlaying,
         elapsedMs,
+        playlistId: currentPlaylistContext?.id || null,
+        playlistType: currentPlaylistContext?.type || null,
       });
       if (typeof data.activeListeners === 'number') {
         useMusicStore.setState({ activeListeners: data.activeListeners });
       }
+      handleNewAchievements(data.newAchievements);
+      handleRateLimitWarning(data.warning);
     } catch {} // Sin conexión: ignorar silenciosamente
   }, 30000); // cada 30 segundos
 }
@@ -80,14 +108,36 @@ function stopHeartbeat() {
   _heartbeatStart = null;
 }
 
+// Cuando el servidor avisa (en la respuesta del heartbeat) de que se ha
+// desbloqueado algún logro nuevo: lo marcamos como desbloqueado en la
+// lista local (sin tener que recargar todo el catálogo) y lo metemos en
+// la cola de notificaciones para que la UI muestre un toast.
+function handleNewAchievements(newAchievements) {
+  if (!Array.isArray(newAchievements) || newAchievements.length === 0) return;
+  useMusicStore.setState(state => ({
+    achievements: state.achievements.map(a => {
+      const unlocked = newAchievements.find(n => n.id === a.id);
+      return unlocked ? { ...a, unlocked: true, unlockedAt: new Date().toISOString(), progress: a.threshold } : a;
+    }),
+    achievementToasts: [...state.achievementToasts, ...newAchievements.map(a => ({ ...a, _toastId: `${a.id}-${Date.now()}-${Math.random()}` }))],
+  }));
+}
+
 // Envía un heartbeat inmediato (al cambiar canción o estado play/pause)
 async function sendHeartbeatNow(token, songId, isPlaying, elapsedMs = 0) {
   if (!token) return;
   try {
-    const data = await pcHeartbeat(token, { songId, isPlaying, elapsedMs });
+    const { currentPlaylistContext } = useMusicStore.getState();
+    const data = await pcHeartbeat(token, {
+      songId, isPlaying, elapsedMs,
+      playlistId: currentPlaylistContext?.id || null,
+      playlistType: currentPlaylistContext?.type || null,
+    });
     if (typeof data.activeListeners === 'number') {
       useMusicStore.setState({ activeListeners: data.activeListeners });
     }
+    handleNewAchievements(data.newAchievements);
+    handleRateLimitWarning(data.warning);
   } catch {}
 }
 
@@ -109,6 +159,18 @@ const useMusicStore = create((set, get) => ({
   volume: 1,
   queue: [], // ── Cola de reproducción (independiente de currentPlaylist) ──
 
+  // ── Logros y estadísticas (datos reales del servidor, nada hardcodeado) ──
+  achievements: [],          // catálogo completo con { unlocked, progress, ... } para este usuario
+  achievementsLoading: false,
+  stats: null,               // { totalListeningSeconds, totalHours, totalSongsPlayed, currentStreak, dailyListening, mostPlayedSong, mostPlayedPlaylist }
+  statsLoading: false,
+  achievementToasts: [],     // cola de logros recién desbloqueados, para mostrar notificaciones
+  rateLimitWarning: null,    // aviso amistoso de "vas muy rápido" antes del bloqueo real
+
+  // Qué playlist/colección está sonando ahora mismo (si la hay), para que
+  // el servidor pueda contar reproducciones por playlist.
+  currentPlaylistContext: null, // { id, type: 'manual' | 'folder', name }
+
   login: async (token, username) => {
     console.log('🔑 Iniciando login...', { token: token?.substring(0, 20) + '...', username });
     const cleanToken = typeof token === 'string' ? token.trim() : '';
@@ -122,6 +184,10 @@ const useMusicStore = create((set, get) => ({
     await get().fetchAll(cleanToken);
     // Arrancar heartbeat al iniciar sesión
     startHeartbeat(get);
+    // Logros y estadísticas no son críticos para poder usar la app:
+    // se cargan en paralelo sin bloquear el login.
+    get().fetchAchievements();
+    get().fetchStats();
   },
 
   logout: () => {
@@ -132,7 +198,8 @@ const useMusicStore = create((set, get) => ({
       token: null, username: null,
       songs: [], favorites: [], playlists: [], folderPlaylists: [],
       currentSong: null, isPlaying: false, position: 0, duration: 0,
-      queue: [],
+      queue: [], currentPlaylistContext: null,
+      achievements: [], stats: null, achievementToasts: [], rateLimitWarning: null,
     });
   },
 
@@ -164,6 +231,59 @@ const useMusicStore = create((set, get) => ({
     set({ activeListeners: count });
   },
 
+  // ── Logros y estadísticas ─────────────────────────────────
+  // Todo viene del servidor: el catálogo (incluidos logros que un admin
+  // haya añadido desde el panel web) y el progreso real de este usuario.
+  fetchAchievements: async () => {
+    const { token } = get();
+    if (!token) return;
+    set({ achievementsLoading: true });
+    try {
+      const achievements = await pcFetchAchievements(token);
+      set({ achievements, achievementsLoading: false });
+    } catch {
+      set({ achievementsLoading: false });
+    }
+  },
+
+  fetchStats: async () => {
+    const { token } = get();
+    if (!token) return;
+    set({ statsLoading: true });
+    try {
+      const stats = await pcFetchStats(token);
+      set({ stats, statsLoading: false });
+    } catch {
+      set({ statsLoading: false });
+    }
+  },
+
+  // Reclama un logro "clientReported" (ej. primera descarga offline).
+  // Si el servidor lo confirma, se refleja al momento en la lista local.
+  claimAchievement: async (achievementId) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const result = await pcClaimAchievement(token, achievementId);
+      if (result?.ok && !result.alreadyUnlocked) {
+        set(state => ({
+          achievements: state.achievements.map(a =>
+            a.id === achievementId ? { ...a, unlocked: true, unlockedAt: new Date().toISOString(), progress: a.threshold } : a
+          ),
+          achievementToasts: [...state.achievementToasts, { ...result.achievement, _toastId: `${achievementId}-${Date.now()}` }],
+        }));
+      }
+    } catch {}
+  },
+
+  dismissAchievementToast: (toastId) => {
+    set(state => ({ achievementToasts: state.achievementToasts.filter(t => t._toastId !== toastId) }));
+  },
+
+  dismissRateLimitWarning: () => {
+    set({ rateLimitWarning: null });
+  },
+
   toggleFavorite: async (songId) => {
     const isFav = get().favorites.includes(songId);
     set({ favorites: isFav ? get().favorites.filter(id => id !== songId) : [...get().favorites, songId] });
@@ -193,7 +313,7 @@ const useMusicStore = create((set, get) => ({
     window.electronAPI?.discordClear();
   },
 
-  playSong: async (song, playlist = []) => {
+  playSong: async (song, playlist = [], playlistContext = null) => {
     const { token } = get();
 
     // Calcular tiempo escuchado antes de cambiar de canción
@@ -224,7 +344,14 @@ const useMusicStore = create((set, get) => ({
     _audio.addEventListener('play',  () => {
       set({ isPlaying: true });
       _heartbeatStart = Date.now();
-      sendHeartbeatNow(get().token, get().currentSong?.id, true, 0);
+      if (_suppressNextPlayHeartbeat) {
+        // Este 'play' es el de una canción que playSong acaba de arrancar:
+        // el heartbeat de este cambio ya lo manda playSong explícitamente
+        // más abajo, así que aquí solo se actualiza el estado.
+        _suppressNextPlayHeartbeat = false;
+      } else {
+        sendHeartbeatNow(get().token, get().currentSong?.id, true, 0);
+      }
       updateDiscordPresence(get().currentSong, { paused: false });
     });
     _audio.addEventListener('pause', () => {
@@ -235,12 +362,21 @@ const useMusicStore = create((set, get) => ({
       updateDiscordPresence(get().currentSong, { paused: true });
     });
 
+    // Se activa justo antes de arrancar esta canción nueva (ver comentario
+    // en la declaración de la variable, arriba del todo del archivo). Con
+    // un pequeño margen de seguridad por si el audio nunca llega a disparar
+    // 'play' (autoplay bloqueado, error de red, etc.), para que el flag no
+    // se quede pegado en `true` y trague por error el heartbeat de una
+    // reproducción futura que no tenga nada que ver con esta.
+    _suppressNextPlayHeartbeat = true;
+    setTimeout(() => { _suppressNextPlayHeartbeat = false; }, 2000);
     _audio.play().catch(() => {});
 
     set({
       currentSong: song,
       currentPlaylist: pl,
       currentIndex: idx >= 0 ? idx : 0,
+      currentPlaylistContext: playlistContext,
       isPlaying: true,
       position: 0,
     });
@@ -252,41 +388,42 @@ const useMusicStore = create((set, get) => ({
     updateDiscordPresence(song, { paused: false });
   },
 
+  // pauseSong/resumeSong ya NO mandan el heartbeat aquí directamente: los
+  // listeners 'pause'/'play' del elemento <audio> (registrados en
+  // playSong) ya lo hacen. Mandarlo aquí también duplicaba cada pausa/
+  // reanudación en dos peticiones al servidor — con uso normal no pasaba
+  // nada grave, pero al probar pausando/reanudando varias veces seguidas
+  // podía agotar el límite de peticiones (rate limit) sin motivo real.
   pauseSong: () => {
-    const elapsed = _heartbeatStart ? Date.now() - _heartbeatStart : 0;
-    _heartbeatStart = null;
     _audio?.pause();
-    sendHeartbeatNow(get().token, get().currentSong?.id, false, elapsed);
-    // La presencia se actualiza automáticamente vía el listener 'pause' del audio
   },
 
   resumeSong: () => {
-    _heartbeatStart = Date.now();
     _audio?.play();
-    sendHeartbeatNow(get().token, get().currentSong?.id, true, 0);
-    // La presencia se actualiza automáticamente vía el listener 'play' del audio
   },
 
   playNext: () => {
-    const { queue, currentPlaylist, currentIndex } = get();
+    const { queue, currentPlaylist, currentIndex, currentPlaylistContext } = get();
 
-    // Si hay canciones en la cola, tienen prioridad sobre la playlist actual
+    // Si hay canciones en la cola, tienen prioridad sobre la playlist actual.
+    // Al reproducirse desde la cola se pierde el contexto de playlist (no
+    // pertenecen a ninguna en concreto).
     if (queue.length > 0) {
       const [next, ...rest] = queue;
       set({ queue: rest });
-      get().playSong(next, currentPlaylist.length ? currentPlaylist : [next]);
+      get().playSong(next, currentPlaylist.length ? currentPlaylist : [next], null);
       return;
     }
 
     if (!currentPlaylist.length) return;
-    get().playSong(currentPlaylist[(currentIndex + 1) % currentPlaylist.length], currentPlaylist);
+    get().playSong(currentPlaylist[(currentIndex + 1) % currentPlaylist.length], currentPlaylist, currentPlaylistContext);
   },
 
   playPrevious: () => {
-    const { currentPlaylist, currentIndex } = get();
+    const { currentPlaylist, currentIndex, currentPlaylistContext } = get();
     if (!currentPlaylist.length) return;
     const prev = currentIndex === 0 ? currentPlaylist.length - 1 : currentIndex - 1;
-    get().playSong(currentPlaylist[prev], currentPlaylist);
+    get().playSong(currentPlaylist[prev], currentPlaylist, currentPlaylistContext);
   },
 
   seekTo:      (ms) => { if (_audio) _audio.currentTime = ms / 1000; set({ position: ms }); },
@@ -298,10 +435,10 @@ const useMusicStore = create((set, get) => ({
     if (_audio) _audio.volume = v;
   },
 
-  playShuffle: (songs) => {
+  playShuffle: (songs, playlistContext = null) => {
     if (!songs.length) return;
     const shuffled = shuffle(songs);
-    get().playSong(shuffled[0], shuffled);
+    get().playSong(shuffled[0], shuffled, playlistContext);
   },
 
   // ── Cola de reproducción ──────────────────────────────────
@@ -341,7 +478,7 @@ const useMusicStore = create((set, get) => ({
     const song = queue[index];
     if (!song) return;
     set({ queue: queue.filter((_, i) => i !== index) });
-    get().playSong(song, currentPlaylist.length ? currentPlaylist : [song]);
+    get().playSong(song, currentPlaylist.length ? currentPlaylist : [song], null);
   },
 }));
 

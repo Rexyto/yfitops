@@ -15,6 +15,8 @@ import {
   deleteBotApiKey
 } from '../lib/storage.js';
 import { ROOT_DIR, WEB_JWT_SECRET } from '../lib/config.js';
+import { getFullCatalog, createAchievement, updateAchievement, deleteAchievement, getUserAchievementsView } from '../lib/achievements.js';
+import { getUserListeningStats, getMostPlayedSong, getMostPlayedPlaylist, getCurrentStreak } from '../lib/userStats.js';
 
 export default function webRoutes(app) {
   app.post('/web/login', async (req, res) => {
@@ -108,6 +110,77 @@ export default function webRoutes(app) {
     if (req.webUser.role !== 'superadmin') return res.status(403).json({ error: 'Sin permisos' });
     await deleteBotApiKey(req.params.id);
     res.json({ success: true });
+  });
+
+  // ── Logros (catálogo) ─────────────────────────────────────
+  // Lectura disponible para cualquier usuario web autenticado;
+  // crear/editar/borrar requiere superadmin (mismo patrón que
+  // las claves de bot).
+  app.get('/web/achievements', webAuthMiddleware, async (req, res) => {
+    try {
+      const achievements = await getFullCatalog();
+      res.json(achievements);
+    } catch (error) {
+      res.status(500).json({ error: 'Error al obtener logros' });
+    }
+  });
+
+  app.post('/web/achievements', webAuthMiddleware, async (req, res) => {
+    if (req.webUser.role !== 'superadmin') return res.status(403).json({ error: 'Sin permisos' });
+    const { icon, title, description, category, metric, threshold, clientReported, active, sortOrder, id } = req.body;
+    if (!title || !metric) return res.status(400).json({ error: 'Faltan campos requeridos (title, metric)' });
+    try {
+      const achievement = await createAchievement({ id, icon, title, description, category, metric, threshold, clientReported, active, sortOrder });
+      res.status(201).json(achievement);
+    } catch (error) {
+      res.status(500).json({ error: 'Error al crear el logro (¿id duplicado?)' });
+    }
+  });
+
+  app.put('/web/achievements/:id', webAuthMiddleware, async (req, res) => {
+    if (req.webUser.role !== 'superadmin') return res.status(403).json({ error: 'Sin permisos' });
+    try {
+      const achievement = await updateAchievement(req.params.id, req.body);
+      if (!achievement) return res.status(404).json({ error: 'Logro no encontrado' });
+      res.json(achievement);
+    } catch (error) {
+      res.status(500).json({ error: 'Error al actualizar el logro' });
+    }
+  });
+
+  app.delete('/web/achievements/:id', webAuthMiddleware, async (req, res) => {
+    if (req.webUser.role !== 'superadmin') return res.status(403).json({ error: 'Sin permisos' });
+    try {
+      await deleteAchievement(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Error al eliminar el logro' });
+    }
+  });
+
+  // ── Estadísticas y logros de un usuario concreto (soporte/admin) ──
+  app.get('/web/users/:id/stats', webAuthMiddleware, async (req, res) => {
+    try {
+      const [listening, mostPlayedSong, mostPlayedPlaylist, streak, achievements] = await Promise.all([
+        getUserListeningStats(req.params.id),
+        getMostPlayedSong(req.params.id),
+        getMostPlayedPlaylist(req.params.id),
+        getCurrentStreak(req.params.id),
+        getUserAchievementsView(req.params.id),
+      ]);
+      res.json({
+        totalListeningSeconds: listening.totalListeningSeconds,
+        totalHours: Math.round((listening.totalListeningSeconds / 3600) * 10) / 10,
+        totalSongsPlayed: listening.totalSongsPlayed,
+        currentStreak: streak,
+        mostPlayedSong,
+        mostPlayedPlaylist,
+        achievementsUnlocked: achievements.filter(a => a.unlocked).length,
+        achievementsTotal: achievements.length,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Error al obtener estadísticas del usuario' });
+    }
   });
 
   app.get('/app.apk', webAuthMiddleware, async (req, res) => {

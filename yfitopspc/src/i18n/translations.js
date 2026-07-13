@@ -134,7 +134,7 @@ const es = {
   'profile.picture.errorType': 'Solo se admiten imágenes JPG o PNG',
   'profile.picture.errorGeneric': 'No se pudo guardar la imagen',
 
-  // Perfil — Estadísticas
+  // Perfil — Estadísticas (todas son datos reales del servidor)
   'profile.stats.title': 'Estadísticas',
   'profile.stats.subtitle': 'Tu actividad dentro de YFitops',
   'profile.stats.songsPlayed': 'Canciones escuchadas',
@@ -142,30 +142,44 @@ const es = {
   'profile.stats.favorites': 'Favoritos',
   'profile.stats.collections': 'Colecciones',
   'profile.stats.streak': 'Racha de días',
-  'profile.stats.topArtist': 'Artista favorito',
-  'profile.stats.comingSoon': 'Próximamente',
-  'profile.stats.footnote': 'Algunas estadísticas son orientativas y llegarán completas en una próxima actualización',
+  'profile.stats.streakDays': (n) => n === 1 ? '1 día' : `${n} días`,
+  'profile.stats.hoursMinutes': (h, m) => `${h}h ${m}min`,
+  'profile.stats.minutesOnly': (m) => `${m} min`,
+  'profile.stats.loading': 'Cargando...',
+  'profile.stats.noDataYet': 'Aún sin datos',
+  'profile.stats.mostPlayedSong': 'Canción más escuchada',
+  'profile.stats.mostPlayedPlaylist': 'Colección más escuchada',
+  'profile.stats.collectionTypeFolder': 'Colección de carpeta',
+  'profile.stats.collectionTypeManual': 'Playlist propia',
 
   // Perfil — Logros
+  // El catálogo de logros (icono, título, descripción, progreso) viene
+  // siempre del servidor: no hay ningún logro fijo en el cliente. Un
+  // administrador puede crear, editar o quitar logros desde el panel web
+  // sin necesidad de actualizar la app.
   'profile.achievements.title': 'Logros',
   'profile.achievements.subtitle': 'Desbloquea logros usando la app',
   'profile.achievements.unlocked': (n, total) => `${n}/${total} desbloqueados`,
-  'profile.ach.first.title': 'Primeros pasos',
-  'profile.ach.first.desc': 'Abre YFitops por primera vez',
-  'profile.ach.favTen.title': 'Fan del corazón',
-  'profile.ach.favTen.desc': 'Marca 10 canciones como favoritas',
-  'profile.ach.collector.title': 'Coleccionista',
-  'profile.ach.collector.desc': 'Crea 5 colecciones propias',
-  'profile.ach.offline.title': 'Modo sin conexión',
-  'profile.ach.offline.desc': 'Descarga tu primera colección',
-  'profile.ach.library.title': 'Explorador',
-  'profile.ach.library.desc': 'Añade 50 canciones a tu biblioteca',
-  'profile.ach.nightowl.title': 'Ave nocturna',
-  'profile.ach.nightowl.desc': 'Escucha música pasada la medianoche',
-  'profile.ach.marathon.title': 'Maratón musical',
-  'profile.ach.marathon.desc': 'Escucha música 3 horas seguidas',
-  'profile.ach.weekstreak.title': 'Racha semanal',
-  'profile.ach.weekstreak.desc': '7 días seguidos escuchando música',
+  'profile.achievements.searchPlaceholder': 'Buscar logro...',
+  'profile.achievements.loading': 'Cargando logros...',
+  'profile.achievements.noResults': 'Ningún logro coincide con el filtro',
+  'profile.achievements.progress': (done, total) => `${done}/${total}`,
+  'profile.achievements.filter.all': 'Todos',
+  'profile.achievements.filter.unlocked': 'Desbloqueados',
+  'profile.achievements.filter.locked': 'Bloqueados',
+  'profile.achievements.category.all': 'Todas las categorías',
+  'profile.achievements.category.general': 'General',
+  'profile.achievements.category.listening': 'Escucha',
+  'profile.achievements.category.time': 'Tiempo',
+  'profile.achievements.category.streak': 'Racha',
+  'profile.achievements.category.favorites': 'Favoritos',
+  'profile.achievements.category.playlists': 'Playlists',
+  'profile.achievements.category.library': 'Biblioteca',
+  'profile.achievements.category.offline': 'Sin conexión',
+
+  // Perfil — Notificación de logro desbloqueado (toast)
+  'profile.toast.unlocked': '¡Logro desbloqueado!',
+
 
   // Ajustes — Apariencia
   'settings.appearance.title': 'Apariencia',
@@ -358,7 +372,7 @@ const en = {
   'profile.picture.errorType': 'Only JPG or PNG images are supported',
   'profile.picture.errorGeneric': 'Could not save the image',
 
-  // Profile — Stats
+  // Profile — Stats (all real data from the server)
   'profile.stats.title': 'Statistics',
   'profile.stats.subtitle': 'Your activity within YFitops',
   'profile.stats.songsPlayed': 'Songs played',
@@ -366,30 +380,44 @@ const en = {
   'profile.stats.favorites': 'Favorites',
   'profile.stats.collections': 'Collections',
   'profile.stats.streak': 'Day streak',
-  'profile.stats.topArtist': 'Top artist',
-  'profile.stats.comingSoon': 'Coming soon',
-  'profile.stats.footnote': 'Some stats are illustrative for now and will be fully tracked in a future update',
+  'profile.stats.streakDays': (n) => n === 1 ? '1 day' : `${n} days`,
+  'profile.stats.hoursMinutes': (h, m) => `${h}h ${m}min`,
+  'profile.stats.minutesOnly': (m) => `${m} min`,
+  'profile.stats.loading': 'Loading...',
+  'profile.stats.noDataYet': 'No data yet',
+  'profile.stats.mostPlayedSong': 'Most played song',
+  'profile.stats.mostPlayedPlaylist': 'Most played collection',
+  'profile.stats.collectionTypeFolder': 'Folder collection',
+  'profile.stats.collectionTypeManual': 'Your playlist',
 
   // Profile — Achievements
+  // The achievement catalog (icon, title, description, progress) always
+  // comes from the server: nothing is hardcoded on the client. An admin
+  // can create, edit, or remove achievements from the web panel without
+  // needing an app update.
   'profile.achievements.title': 'Achievements',
   'profile.achievements.subtitle': 'Unlock achievements by using the app',
   'profile.achievements.unlocked': (n, total) => `${n}/${total} unlocked`,
-  'profile.ach.first.title': 'First steps',
-  'profile.ach.first.desc': 'Open YFitops for the first time',
-  'profile.ach.favTen.title': 'Heart fan',
-  'profile.ach.favTen.desc': 'Mark 10 songs as favorites',
-  'profile.ach.collector.title': 'Collector',
-  'profile.ach.collector.desc': 'Create 5 collections of your own',
-  'profile.ach.offline.title': 'Offline mode',
-  'profile.ach.offline.desc': 'Download your first collection',
-  'profile.ach.library.title': 'Explorer',
-  'profile.ach.library.desc': 'Add 50 songs to your library',
-  'profile.ach.nightowl.title': 'Night owl',
-  'profile.ach.nightowl.desc': 'Listen to music past midnight',
-  'profile.ach.marathon.title': 'Music marathon',
-  'profile.ach.marathon.desc': 'Listen to music for 3 hours straight',
-  'profile.ach.weekstreak.title': 'Weekly streak',
-  'profile.ach.weekstreak.desc': '7 days in a row listening to music',
+  'profile.achievements.searchPlaceholder': 'Search achievement...',
+  'profile.achievements.loading': 'Loading achievements...',
+  'profile.achievements.noResults': 'No achievement matches this filter',
+  'profile.achievements.progress': (done, total) => `${done}/${total}`,
+  'profile.achievements.filter.all': 'All',
+  'profile.achievements.filter.unlocked': 'Unlocked',
+  'profile.achievements.filter.locked': 'Locked',
+  'profile.achievements.category.all': 'All categories',
+  'profile.achievements.category.general': 'General',
+  'profile.achievements.category.listening': 'Listening',
+  'profile.achievements.category.time': 'Time',
+  'profile.achievements.category.streak': 'Streak',
+  'profile.achievements.category.favorites': 'Favorites',
+  'profile.achievements.category.playlists': 'Playlists',
+  'profile.achievements.category.library': 'Library',
+  'profile.achievements.category.offline': 'Offline',
+
+  // Profile — Achievement unlocked notification (toast)
+  'profile.toast.unlocked': 'Achievement unlocked!',
+
 
   // Settings — Appearance
   'settings.appearance.title': 'Appearance',

@@ -149,14 +149,14 @@ export async function pcDeletePlaylist(token, playlistId) {
 
 // ─── Telemetría ──────────────────────────────────────────────────────────────
 
-export async function pcHeartbeat(token, { songId = null, isPlaying, elapsedMs = 0 } = {}) {
+export async function pcHeartbeat(token, { songId = null, isPlaying, elapsedMs = 0, playlistId = null, playlistType = null } = {}) {
   const r = await fetch(`${SERVER_URL}/pc/heartbeat`, {
     method: 'POST',
     headers: headers(token),
-    body: JSON.stringify({ songId, isPlaying, elapsedMs }),
+    body: JSON.stringify({ songId, isPlaying, elapsedMs, playlistId, playlistType }),
   });
-  if (!r.ok) return { activeListeners: 0 };
-  return r.json(); // { activeListeners: number }
+  if (!r.ok) return { activeListeners: 0, newAchievements: [] };
+  return r.json(); // { activeListeners: number, newAchievements: Achievement[] }
 }
 
 export async function pcSendLatency(token, latencyMs) {
@@ -206,4 +206,34 @@ export async function pcPing(token) {
   const r = await fetch(`${SERVER_URL}/pc/ping`, { headers: headers(token) });
   if (!r.ok) return null;
   return r.json(); // { pong: timestamp }
+}
+
+// ─── Logros y estadísticas personales ────────────────────────────────────────
+// El catálogo de logros y las estadísticas viven en el servidor (MySQL), no
+// hay nada hardcodeado en el cliente: si se crea un logro nuevo desde el
+// panel web, aparece aquí solo con recargar.
+
+export async function pcFetchAchievements(token) {
+  const r = await fetch(`${SERVER_URL}/pc/achievements`, { headers: headers(token) });
+  if (!r.ok) return [];
+  return r.json(); // Achievement[] con { id, icon, title, description, category, threshold, clientReported, unlocked, unlockedAt, progress }
+}
+
+// Reclama un logro "clientReported" (cosas que solo sabe el cliente, como
+// una descarga offline). El servidor valida que sea reclamable; no sirve
+// para desbloquear logros normales a mano.
+export async function pcClaimAchievement(token, achievementId) {
+  const r = await fetch(`${SERVER_URL}/pc/achievements/${achievementId}/claim`, {
+    method: 'POST',
+    headers: headers(token),
+  });
+  const data = await r.json();
+  if (!r.ok || !data.ok) return null;
+  return data; // { ok, alreadyUnlocked, achievement }
+}
+
+export async function pcFetchStats(token) {
+  const r = await fetch(`${SERVER_URL}/pc/stats/me`, { headers: headers(token) });
+  if (!r.ok) return null;
+  return r.json();
 }

@@ -60,13 +60,17 @@ function PlaylistCard({ playlist, type, onClick, isDownloaded }) {
 }
 
 // ── Vista detalle de playlist ────────────────────────────────
-function PlaylistDetail({ playlist, songs, isDownloaded, onBack }) {
+function PlaylistDetail({ playlist, type, songs, isDownloaded, onBack }) {
   const { playSong, playShuffle, toggleFavorite, favorites, addToQueue, addManyToQueue } = useMusicStore();
   const { downloadedSongIds } = useSettingsStore();
   const t = useT();
   const [search, setSearch] = useState('');
   const [searchVisible, setSearchVisible] = useState(false);
   const [queuedId, setQueuedId] = useState(null);
+
+  // Se manda al servidor en cada heartbeat mientras suena una canción de
+  // esta playlist, para las estadísticas de "colección más escuchada".
+  const playlistContext = { id: playlist.id, type, name: playlist.name };
 
   const allSongs = songs;
   const filtered = search.trim()
@@ -109,10 +113,10 @@ function PlaylistDetail({ playlist, songs, isDownloaded, onBack }) {
 
       {/* Acciones */}
       <div style={styles.actionRow}>
-        <button style={{ ...styles.shuffleBtn, borderColor: color + '66', color }} onClick={() => playShuffle(allSongs)}>
+        <button style={{ ...styles.shuffleBtn, borderColor: color + '66', color }} onClick={() => playShuffle(allSongs, playlistContext)}>
           {t('playlists.shuffle')}
         </button>
-        <button style={{ ...styles.playAllBtn, background: color }} onClick={() => allSongs.length > 0 && playSong(allSongs[0], allSongs)}>
+        <button style={{ ...styles.playAllBtn, background: color }} onClick={() => allSongs.length > 0 && playSong(allSongs[0], allSongs, playlistContext)}>
           {t('playlists.play')}
         </button>
         <button
@@ -159,7 +163,7 @@ function PlaylistDetail({ playlist, songs, isDownloaded, onBack }) {
             <div
               key={song.id || index}
               style={{ ...styles.songRow, ...(isActive ? styles.songRowActive : {}) }}
-              onClick={() => playSong(song, filtered.length > 0 ? filtered : allSongs)}
+              onClick={() => playSong(song, filtered.length > 0 ? filtered : allSongs, playlistContext)}
             >
               <span style={{ ...styles.idx, ...(isActive ? { color } : {}) }}>
                 {isActive ? '▶' : index + 1}
@@ -225,6 +229,7 @@ export default function PlaylistsView() {
     return (
       <PlaylistDetail
         playlist={detail.playlist}
+        type={detail.type}
         songs={resolvedSongs}
         isDownloaded={isPlaylistDownloaded(detail.playlist.id)}
         onBack={() => setDetail(null)}

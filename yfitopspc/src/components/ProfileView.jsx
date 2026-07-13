@@ -1,13 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import useMusicStore from '../store/MusicStore';
 import useSettingsStore from '../store/SettingsStore';
 import { useT } from '../i18n';
-
-// ── Utilidad de formato de tiempo (para estadísticas mock) ─────
-function fmtHours(mins) {
-  const h = Math.floor(mins / 60), m = mins % 60;
-  return h > 0 ? `${h}h ${m}min` : `${m} min`;
-}
 
 // ── Tarjeta de estadística ───────────────────────────────────
 function StatCard({ icon, label, value, hint }) {
@@ -23,8 +17,27 @@ function StatCard({ icon, label, value, hint }) {
   );
 }
 
-// ── Tarjeta de logro ──────────────────────────────────────────
-function AchievementCard({ icon, title, desc, unlocked, progress }) {
+// ── Tarjeta de "más escuchado" (canción / colección) ─────────
+function HighlightCard({ icon, label, title, subtitle, plays, emptyText }) {
+  return (
+    <div style={styles.highlightCard}>
+      <span style={styles.highlightLabel}>{icon} {label}</span>
+      {title ? (
+        <>
+          <span style={styles.highlightTitle}>{title}</span>
+          {subtitle && <span style={styles.highlightSubtitle}>{subtitle}</span>}
+          {typeof plays === 'number' && <span style={styles.highlightPlays}>{plays}</span>}
+        </>
+      ) : (
+        <span style={styles.highlightEmpty}>{emptyText}</span>
+      )}
+    </div>
+  );
+}
+
+// ── Tarjeta de logro (contenido siempre viene del servidor) ──
+function AchievementCard({ icon, title, description, unlocked, progress, threshold, progressLabel }) {
+  const pct = threshold > 0 ? Math.min(100, (progress / threshold) * 100) : 0;
   return (
     <div style={{ ...styles.achCard, ...(unlocked ? styles.achCardUnlocked : {}) }}>
       <div style={{ ...styles.achIconWrap, ...(unlocked ? styles.achIconWrapUnlocked : {}) }}>
@@ -34,13 +47,13 @@ function AchievementCard({ icon, title, desc, unlocked, progress }) {
       </div>
       <div style={styles.achBody}>
         <span style={{ ...styles.achTitle, ...(unlocked ? {} : styles.achTitleLocked) }}>{title}</span>
-        <span style={styles.achDesc}>{desc}</span>
-        {progress && !unlocked && (
+        <span style={styles.achDesc}>{description}</span>
+        {!unlocked && threshold > 1 && (
           <div style={styles.achProgressWrap}>
             <div style={styles.achProgressTrack}>
-              <div style={{ ...styles.achProgressFill, width: `${Math.min(100, (progress.done / progress.total) * 100)}%` }} />
+              <div style={{ ...styles.achProgressFill, width: `${pct}%` }} />
             </div>
-            <span style={styles.achProgressText}>{progress.done}/{progress.total}</span>
+            <span style={styles.achProgressText}>{progressLabel}</span>
           </div>
         )}
       </div>
@@ -49,14 +62,50 @@ function AchievementCard({ icon, title, desc, unlocked, progress }) {
   );
 }
 
+function fmtSeconds(totalSeconds, t) {
+  if (!totalSeconds) return '0 min';
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  return h > 0 ? t('profile.stats.hoursMinutes', h, m) : t('profile.stats.minutesOnly', m);
+}
+
 export default function ProfileView() {
-  const { username, favorites, playlists, folderPlaylists, songs } = useMusicStore();
+  const {
+    username,
+    achievements, achievementsLoading, stats, statsLoading,
+    fetchAchievements, fetchStats, claimAchievement,
+  } = useMusicStore();
   const { profilePicture, uploadProfilePicture, removeProfilePicture, offlinePlaylists } = useSettingsStore();
   const t = useT();
 
   const fileRef = useRef();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // all | unlocked | locked
+  const [categoryFilter, setCategoryFilter] = useState('all');
+
+  // Refresca logros/estadísticas cada vez que se entra en la pestaña de
+  // perfil (además de la carga inicial que ya hace el login).
+  useEffect(() => {
+    fetchAchievements();
+    fetchStats();
+  }, []);
+
+  // Reintento silencioso del logro "Modo Avión": si el usuario ya tiene
+  // alguna colección descargada para offline pero el logro no aparece
+  // como desbloqueado (por ejemplo, porque el primer intento de
+  // reclamarlo falló por falta de red o por el rate limit), se vuelve a
+  // reclamar solo. claimAchievement es idempotente en el servidor, así
+  // que no pasa nada si ya estaba desbloqueado.
+  useEffect(() => {
+    if (achievementsLoading || achievements.length === 0) return;
+    if (offlinePlaylists.length === 0) return;
+    const offlineAch = achievements.find(a => a.id === 'offline_first');
+    if (offlineAch && !offlineAch.unlocked) {
+      claimAchievement('offline_first');
+    }
+  }, [achievementsLoading, achievements, offlinePlaylists]);
 
   const handlePicChange = async (e) => {
     const file = e.target.files?.[0];
@@ -77,32 +126,32 @@ export default function ProfileView() {
     }
   };
 
-  const totalCollections = playlists.length + folderPlaylists.length;
-
-  // ── Estadísticas: mezcla de datos reales disponibles y valores
-  // ilustrativos (marcados como "Próximamente") hasta que el backend
-  // trackee reproducciones/tiempo real de escucha. ──────────────
-  const stats = [
-    { icon: '❤️', label: t('profile.stats.favorites'), value: favorites.length },
-    { icon: '📁', label: t('profile.stats.collections'), value: totalCollections },
-    { icon: '🎧', label: t('profile.stats.songsPlayed'), value: '—', hint: t('profile.stats.comingSoon') },
-    { icon: '⏱️', label: t('profile.stats.totalTime'), value: '—', hint: t('profile.stats.comingSoon') },
-    { icon: '🔥', label: t('profile.stats.streak'), value: '—', hint: t('profile.stats.comingSoon') },
-    { icon: '🎤', label: t('profile.stats.topArtist'), value: '—', hint: t('profile.stats.comingSoon') },
+  // ── Estadísticas: todas reales, calculadas en el servidor a partir del
+  // historial de escucha (nada de valores "Próximamente"). ─────────────
+  const statCards = [
+    { icon: '🎧', label: t('profile.stats.songsPlayed'), value: stats ? stats.totalSongsPlayed : '—' },
+    { icon: '⏱️', label: t('profile.stats.totalTime'), value: stats ? fmtSeconds(stats.totalListeningSeconds, t) : '—' },
+    { icon: '🔥', label: t('profile.stats.streak'), value: stats ? t('profile.stats.streakDays', stats.currentStreak) : '—' },
   ];
 
-  // ── Logros: algunos calculados con datos reales del usuario,
-  // otros aspiracionales pendientes de trackeo futuro. ──────────
-  const achievements = [
-    { icon: '🎵', key: 'first', unlocked: true },
-    { icon: '💚', key: 'favTen', unlocked: favorites.length >= 10, progress: { done: Math.min(favorites.length, 10), total: 10 } },
-    { icon: '📚', key: 'collector', unlocked: playlists.length >= 5, progress: { done: Math.min(playlists.length, 5), total: 5 } },
-    { icon: '⬇️', key: 'offline', unlocked: offlinePlaylists.length > 0 },
-    { icon: '🧭', key: 'library', unlocked: songs.length >= 50, progress: { done: Math.min(songs.length, 50), total: 50 } },
-    { icon: '🌙', key: 'nightowl', unlocked: false },
-    { icon: '🏃', key: 'marathon', unlocked: false },
-    { icon: '📅', key: 'weekstreak', unlocked: false },
-  ];
+  // ── Catálogo de logros: 100% dinámico, viene del servidor tal cual
+  // (icono, título, descripción, umbral, progreso actual). Si se crea un
+  // logro nuevo desde el panel web, aparece aquí solo con recargar. ────
+  const categories = useMemo(() => {
+    const set = new Set(achievements.map(a => a.category).filter(Boolean));
+    return Array.from(set);
+  }, [achievements]);
+
+  const filteredAchievements = useMemo(() => {
+    return achievements.filter(a => {
+      if (statusFilter === 'unlocked' && !a.unlocked) return false;
+      if (statusFilter === 'locked' && a.unlocked) return false;
+      if (categoryFilter !== 'all' && a.category !== categoryFilter) return false;
+      if (search && !`${a.title} ${a.description}`.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    });
+  }, [achievements, search, statusFilter, categoryFilter]);
+
   const unlockedCount = achievements.filter(a => a.unlocked).length;
 
   return (
@@ -153,9 +202,27 @@ export default function ProfileView() {
           <span style={styles.sectionSubtitle}>{t('profile.stats.subtitle')}</span>
         </div>
         <div style={styles.statsGrid}>
-          {stats.map((s, i) => <StatCard key={i} {...s} />)}
+          {statCards.map((s, i) => <StatCard key={i} {...s} />)}
         </div>
-        <p style={styles.footnote}>{t('profile.stats.footnote')}</p>
+
+        <div style={styles.highlightGrid}>
+          <HighlightCard
+            icon="🎵"
+            label={t('profile.stats.mostPlayedSong')}
+            title={stats?.mostPlayedSong?.title}
+            subtitle={stats?.mostPlayedSong?.artist}
+            plays={stats?.mostPlayedSong ? stats.mostPlayedSong.playCount : null}
+            emptyText={statsLoading ? t('profile.stats.loading') : t('profile.stats.noDataYet')}
+          />
+          <HighlightCard
+            icon="📻"
+            label={t('profile.stats.mostPlayedPlaylist')}
+            title={stats?.mostPlayedPlaylist?.name}
+            subtitle={stats?.mostPlayedPlaylist ? (stats.mostPlayedPlaylist.type === 'folder' ? t('profile.stats.collectionTypeFolder') : t('profile.stats.collectionTypeManual')) : null}
+            plays={stats?.mostPlayedPlaylist ? stats.mostPlayedPlaylist.playCount : null}
+            emptyText={statsLoading ? t('profile.stats.loading') : t('profile.stats.noDataYet')}
+          />
+        </div>
       </section>
 
       {/* ── Logros ── */}
@@ -169,18 +236,66 @@ export default function ProfileView() {
             <span style={styles.achBadgeCount}>{t('profile.achievements.unlocked', unlockedCount, achievements.length)}</span>
           </div>
         </div>
-        <div style={styles.achGrid}>
-          {achievements.map(a => (
-            <AchievementCard
-              key={a.key}
-              icon={a.icon}
-              unlocked={a.unlocked}
-              progress={a.progress}
-              title={t(`profile.ach.${a.key}.title`)}
-              desc={t(`profile.ach.${a.key}.desc`)}
-            />
-          ))}
+
+        <div style={styles.achFilters}>
+          <input
+            style={styles.achSearch}
+            placeholder={t('profile.achievements.searchPlaceholder')}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <div style={styles.achChips}>
+            {['all', 'unlocked', 'locked'].map(f => (
+              <button
+                key={f}
+                style={{ ...styles.achChip, ...(statusFilter === f ? styles.achChipActive : {}) }}
+                onClick={() => setStatusFilter(f)}
+              >
+                {t(`profile.achievements.filter.${f}`)}
+              </button>
+            ))}
+          </div>
+          {categories.length > 1 && (
+            <div style={styles.achChips}>
+              <button
+                style={{ ...styles.achChip, ...(categoryFilter === 'all' ? styles.achChipActive : {}) }}
+                onClick={() => setCategoryFilter('all')}
+              >
+                {t('profile.achievements.category.all')}
+              </button>
+              {categories.map(c => (
+                <button
+                  key={c}
+                  style={{ ...styles.achChip, ...(categoryFilter === c ? styles.achChipActive : {}) }}
+                  onClick={() => setCategoryFilter(c)}
+                >
+                  {t(`profile.achievements.category.${c}`)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
+        {achievementsLoading && achievements.length === 0 ? (
+          <p style={styles.achLoading}>{t('profile.achievements.loading')}</p>
+        ) : filteredAchievements.length === 0 ? (
+          <p style={styles.achLoading}>{t('profile.achievements.noResults')}</p>
+        ) : (
+          <div style={styles.achGrid}>
+            {filteredAchievements.map(a => (
+              <AchievementCard
+                key={a.id}
+                icon={a.icon}
+                unlocked={a.unlocked}
+                progress={a.progress}
+                threshold={a.threshold}
+                progressLabel={t('profile.achievements.progress', Math.floor(a.progress), a.threshold)}
+                title={a.title}
+                description={a.description}
+              />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
@@ -228,7 +343,19 @@ const styles = {
   statValue: { color: 'var(--text)', fontSize: 20, fontWeight: 800, lineHeight: 1.1 },
   statLabel: { color: 'var(--text-dim)', fontSize: 11.5, fontWeight: 600, marginTop: 2 },
   statHint: { color: 'var(--text-faint)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
-  footnote: { color: 'var(--text-faint)', fontSize: 11.5, margin: '14px 0 0', lineHeight: 1.5 },
+
+  // Más escuchado
+  highlightGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginTop: 12 },
+  highlightCard: {
+    display: 'flex', flexDirection: 'column', gap: 3,
+    background: 'var(--bg3)', border: '1px solid var(--border-strong)',
+    borderRadius: 12, padding: '14px 16px', position: 'relative',
+  },
+  highlightLabel: { color: 'var(--text-dim)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  highlightTitle: { color: 'var(--text)', fontSize: 15, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  highlightSubtitle: { color: 'var(--text-dim)', fontSize: 12.5 },
+  highlightPlays: { position: 'absolute', top: 12, right: 14, color: '#1ed760', fontSize: 11, fontWeight: 800 },
+  highlightEmpty: { color: 'var(--text-faint)', fontSize: 13 },
 
   // Logros
   achHeadRow: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
@@ -236,6 +363,18 @@ const styles = {
     background: '#1ed76015', border: '1px solid #1ed76030', borderRadius: 20,
     padding: '6px 12px', color: '#1ed760', fontSize: 12, fontWeight: 700, flexShrink: 0,
   },
+  achFilters: { display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 },
+  achSearch: {
+    background: 'var(--bg4)', border: '1px solid var(--border-strong)', borderRadius: 10,
+    padding: '10px 14px', color: 'var(--text)', fontSize: 13.5, outline: 'none', width: '100%', boxSizing: 'border-box',
+  },
+  achChips: { display: 'flex', gap: 8, flexWrap: 'wrap' },
+  achChip: {
+    background: 'var(--bg4)', border: '1px solid var(--border-strong)', borderRadius: 20,
+    padding: '6px 13px', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+  },
+  achChipActive: { background: '#1ed76020', borderColor: '#1ed76060', color: '#1ed760' },
+  achLoading: { color: 'var(--text-dim)', fontSize: 13, textAlign: 'center', padding: '30px 0' },
   achGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 },
   achCard: {
     display: 'flex', alignItems: 'flex-start', gap: 12,
@@ -261,5 +400,5 @@ const styles = {
   achProgressWrap: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 },
   achProgressTrack: { flex: 1, height: 4, background: 'var(--bg4)', borderRadius: 2, overflow: 'hidden' },
   achProgressFill: { height: '100%', background: '#1ed760', borderRadius: 2 },
-  achProgressText: { color: 'var(--text-faint)', fontSize: 10, fontWeight: 700, flexShrink: 0 },
+  achProgressText: { color: 'var(--text-faint)', fontSize: 10, fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap' },
 };

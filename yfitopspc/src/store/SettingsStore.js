@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import useMusicStore from './MusicStore';
 
 const THEME_KEY = 'yfitops_theme';
 const LANG_KEY = 'yfitops_language';
@@ -187,6 +188,11 @@ const useSettingsStore = create((set, get) => ({
           duration: s.duration, coverUrl: s.coverUrl || null,
         })),
       });
+
+      // Logro "Modo Avión": se reclama en el servidor. Es idempotente (si ya
+      // estaba desbloqueado, el servidor simplemente no hace nada), así que
+      // no hace falta comprobar aquí si es la primera descarga o no.
+      useMusicStore.getState().claimAchievement('offline_first');
     } finally {
       set(s => ({ downloadingIds: s.downloadingIds.filter(x => x !== id) }));
       await get().refreshDownloads();

@@ -17,6 +17,7 @@ import { attachRoutes } from './routes/index.js';
 import { scanSongsOnStartup } from './lib/startup.js';
 import { syncPlaylistDir, watchCanciones, watchPlaylistDir } from './lib/watchers.js';
 import { initializeDatabase } from './lib/mysql.js';
+import { globalIpLimiter, loginLimiter, heartbeatLimiter, apiLimiter, pcLimiter, webLimiter, botLimiter } from './lib/rateLimit.js';
 
 const configModule = await import(new URL('./lib/config.js', import.meta.url));
 const { HOST, PORT, DIST_DIR, CANCIONES_DIR, PLAYLIST_DIR, PORTADAS_DIR, ROOT_DIR, DATA_DIR } = configModule;
@@ -26,6 +27,25 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+// ── Protección anti-spam (ver lib/rateLimit.js) ──────────────
+// 1) Límite global por IP como backstop para todo el servidor.
+// 2) Límites específicos por plataforma/ruta, más generosos en
+//    heartbeat/latencia (se llaman muy seguido) y más estrictos
+//    en login (fuerza bruta) y en bots.
+app.use(globalIpLimiter);
+app.use('/api/login', loginLimiter);
+app.use('/pc/login', loginLimiter);
+app.use('/web/login', loginLimiter);
+app.use('/api/heartbeat', heartbeatLimiter);
+app.use('/api/latency', heartbeatLimiter);
+app.use('/pc/heartbeat', heartbeatLimiter);
+app.use('/pc/latency', heartbeatLimiter);
+app.use('/api', apiLimiter);
+app.use('/pc', pcLimiter);
+app.use('/web', webLimiter);
+app.use('/bot', botLimiter);
+
 app.use('/canciones', express.static(CANCIONES_DIR));
 app.use('/playlist', express.static(PLAYLIST_DIR));
 app.use('/portadas', express.static(PORTADAS_DIR));

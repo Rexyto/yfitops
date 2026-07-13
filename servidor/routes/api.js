@@ -8,6 +8,24 @@ import { processAudioFile, getAudioDuration, listPortadaFiles, matchCustomCover 
 import { CANCIONES_DIR, PLAYLIST_DIR, AUDIO_EXTS, JWT_SECRET } from '../lib/config.js';
 import { activeListeners } from '../lib/activeListeners.js';
 import { syncPlaylistDir } from '../lib/watchers.js';
+import { addListeningSeconds, recordSongPlay, recordPlaylistPlay, getUserDailyListening, getMostPlayedSong, getMostPlayedPlaylist, getCurrentStreak, getUserListeningStats } from '../lib/userStats.js';
+import { evaluateUserAchievements, getUserAchievementsView, claimClientAchievement } from '../lib/achievements.js';
+import { uploadLimiter } from '../lib/rateLimit.js';
+
+// Busca una canción por id tanto en la biblioteca principal (data.songs)
+// como en las canciones de las playlists de carpeta (dataPl.playlists[].songs).
+// Sin esto, cualquier reproducción de una canción que sólo vive dentro de
+// una colección de carpeta (que puede ser la inmensa mayoría de la
+// biblioteca) no encontraba título/artista y se guardaba como "Desconocido".
+function findSongMeta(songId, data, dataPl) {
+  const inLibrary = data.songs.find(s => s.id === songId);
+  if (inLibrary) return inLibrary;
+  for (const playlist of dataPl.playlists || []) {
+    const found = (playlist.songs || []).find(s => s.id === songId);
+    if (found) return found;
+  }
+  return null;
+}
 
 export default function apiRoutes(app) {
   app.post('/api/login', async (req, res) => {
@@ -18,6 +36,7 @@ export default function apiRoutes(app) {
     if (!user || hashPassword(password) !== user.password) return res.status(401).json({ error: 'Usuario o contrase�a incorrectos' });
     const token = jwt.sign({ username: user.username, id: user.id }, JWT_SECRET, { expiresIn: '30d' });
     activeListeners.set(user.id, { songId: null, isPlaying: false, timestamp: Date.now() });
+    evaluateUserAchievements(user.id).catch(() => {});
     res.json({ token, username: user.username, id: user.id });
   });
 
@@ -25,9 +44,31 @@ export default function apiRoutes(app) {
   app.get('/api/version', authMiddleware, async (req, res) => res.json(await readVersion()));
 
   app.post('/api/heartbeat', authMiddleware, async (req, res) => {
-    const { songId, isPlaying, elapsedMs } = req.body;
+    // playlistId/playlistType son opcionales: si el cliente los manda,
+    // se registra qué playlist está sonando para las estadísticas de
+    // "playlist más escuchada". Clientes antiguos que no los manden
+    // siguen funcionando exactamente igual que antes.
+    const { songId, isPlaying, elapsedMs, playlistId, playlistType } = req.body;
     const prev = activeListeners.get(req.user.id);
     const now = Date.now();
+    // Sólo cuenta como "nueva reproducción" si cambia la canción (o es la
+    // primera vez que vemos a este usuario reproducir algo). Antes también
+    // se disparaba con "!prev.isPlaying", lo que hacía que pausar y
+    // reanudar la MISMA canción se contara como una reproducción nueva
+    // (inflaba "canciones reproducidas", el contador de "misma canción
+    // repetida" y disparaba logros de golpe). Un simple resume ya NO cuenta.
+    const isNewPlay = !!(songId && isPlaying && (!prev || songId !== prev.songId));
+
+    // IMPORTANTE: actualizar activeListeners AQUÍ, de forma síncrona y ANTES
+    // de cualquier `await`. Si dos heartbeats casi simultáneos del mismo
+    // usuario llegan a la vez (por ejemplo, un cliente con un bug que manda
+    // el heartbeat dos veces al cambiar de canción), esto evita que ambos
+    // lean el mismo `prev` desactualizado y los dos se cuenten como
+    // "nueva reproducción" (duplicando el contador de reproducciones y
+    // devolviendo el mismo logro dos veces al cliente). Node es de un solo
+    // hilo: mientras no haya un `await` de por medio, este tramo se ejecuta
+    // entero sin que otra petición pueda colarse.
+    activeListeners.set(req.user.id, { songId, isPlaying: !!isPlaying, timestamp: now });
 
     if (typeof elapsedMs === 'number' && elapsedMs > 0 && elapsedMs < 7200000) {
       const elapsedSecs = Math.round(elapsedMs / 1000);
@@ -36,21 +77,62 @@ export default function apiRoutes(app) {
       const today = new Date().toISOString().slice(0, 10);
       stats.dailyListening[today] = (stats.dailyListening[today] || 0) + elapsedSecs;
       await writeStats(stats);
+      addListeningSeconds(req.user.id, elapsedSecs).catch(() => {});
     }
 
-    if (songId && isPlaying && (!prev || songId !== prev.songId || !prev.isPlaying)) {
+    if (isNewPlay) {
       const stats = await readStats();
       stats.totalSongsPlayed++;
       await writeStats(stats);
+
+      try {
+        const data = await readData();
+        const dataPl = await readDataPl();
+        const song = findSongMeta(songId, data, dataPl);
+        await recordSongPlay(req.user.id, { id: songId, title: song?.title, artist: song?.artist });
+
+        if (playlistId) {
+          const type = playlistType === 'folder' ? 'folder' : 'manual';
+          let name;
+          if (type === 'folder') {
+            name = dataPl.playlists.find(p => p.id === playlistId)?.name;
+          } else {
+            name = (data.playlists || []).find(p => p.id === playlistId)?.name;
+          }
+          await recordPlaylistPlay(req.user.id, { id: playlistId, type, name });
+        }
+      } catch (e) {
+        console.error('[HEARTBEAT] Error registrando estadísticas de usuario:', e.message);
+      }
     }
 
-    activeListeners.set(req.user.id, { songId, isPlaying: !!isPlaying, timestamp: now });
     for (const [uid, data] of activeListeners.entries()) {
       if (now - data.timestamp > 180000) activeListeners.delete(uid);
     }
 
     const count = [...activeListeners.values()].filter(d => d.songId && now - d.timestamp < 180000).length;
-    res.json({ activeListeners: count });
+
+    // Los logros se evalúan en cada cambio de canción (punto barato y
+    // frecuente): así el cliente puede mostrar un toast casi al
+    // instante sin tener que hacer polling aparte. evaluateUserAchievements
+    // ya se protege sola contra llamadas concurrentes para el mismo
+    // usuario (ver lib/achievements.js), así que aunque llegase a haber
+    // dos heartbeats a la vez no se duplica el logro devuelto.
+    let newAchievements = [];
+    if (isNewPlay) {
+      try { newAchievements = await evaluateUserAchievements(req.user.id); } catch {}
+    }
+
+    // Si el limitador de peticiones detecta que este usuario se está
+    // acercando al límite (sin haberlo superado todavía), viaja aquí un
+    // aviso amistoso para que el cliente lo muestre y la persona reduzca
+    // la frecuencia antes de que le lleguemos a bloquear de verdad.
+    const response = {
+      activeListeners: count,
+      newAchievements: newAchievements.map(a => ({ id: a.id, icon: a.icon, title: a.title, description: a.description })),
+    };
+    if (req.rateLimitWarning) response.warning = req.rateLimitWarning;
+    res.json(response);
   });
 
   app.get('/api/listeners', authMiddleware, (req, res) => {
@@ -95,7 +177,7 @@ export default function apiRoutes(app) {
     res.json(data.songs.filter(s => mySongIds.has(s.id)));
   });
 
-  app.post('/api/upload', authMiddleware, upload.single('audio'), async (req, res) => {
+  app.post('/api/upload', authMiddleware, uploadLimiter, upload.single('audio'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No se subi� archivo' });
     const data = await readData();
     if (data.songs.some(s => s.filename === req.file.filename)) return res.json(data.songs.find(s => s.filename === req.file.filename));
@@ -118,6 +200,7 @@ export default function apiRoutes(app) {
       users[userIdx].songs.push(song.id);
       await writeUsers(users);
     }
+    evaluateUserAchievements(req.user.id).catch(() => {});
     res.json(song);
   });
 
@@ -175,6 +258,7 @@ export default function apiRoutes(app) {
     if (!users[idx].favorites.includes(req.params.id)) {
       users[idx].favorites.push(req.params.id);
       await writeUsers(users);
+      evaluateUserAchievements(req.user.id).catch(() => {});
     }
     res.json({ success: true });
   });
@@ -199,6 +283,7 @@ export default function apiRoutes(app) {
     const playlist = { id: Date.now().toString(), name: req.body.name, songs: req.body.songs || [], coverColor: req.body.coverColor || '#1DB954', userId: req.user.id, createdAt: new Date().toISOString() };
     data.playlists.push(playlist);
     await writeData(data);
+    evaluateUserAchievements(req.user.id).catch(() => {});
     res.json(playlist);
   });
 
@@ -307,6 +392,55 @@ export default function apiRoutes(app) {
       processingTimes: stats.processingTimes.slice(-20),
       dailyChart: days,
     });
+  });
+
+  // ── Logros ──────────────────────────────────────────────
+  app.get('/api/achievements', authMiddleware, async (req, res) => {
+    try {
+      const achievements = await getUserAchievementsView(req.user.id);
+      res.json(achievements);
+    } catch (error) {
+      res.status(500).json({ error: 'Error al obtener logros' });
+    }
+  });
+
+  // Reclamo manual para logros "client_reported" (los que sólo el
+  // cliente puede saber, ej. descargas offline). El servidor valida
+  // que el logro exista y esté marcado como reclamable antes de
+  // desbloquearlo; no se puede usar para desbloquear logros normales.
+  app.post('/api/achievements/:id/claim', authMiddleware, async (req, res) => {
+    try {
+      const result = await claimClientAchievement(req.user.id, req.params.id);
+      if (!result.ok) return res.status(400).json(result);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: 'Error al reclamar logro' });
+    }
+  });
+
+  // ── Estadísticas personales ──────────────────────────────
+  app.get('/api/stats/me', authMiddleware, async (req, res) => {
+    try {
+      const [listening, daily, mostPlayedSong, mostPlayedPlaylist, streak] = await Promise.all([
+        getUserListeningStats(req.user.id),
+        getUserDailyListening(req.user.id, 30),
+        getMostPlayedSong(req.user.id),
+        getMostPlayedPlaylist(req.user.id),
+        getCurrentStreak(req.user.id),
+      ]);
+
+      res.json({
+        totalListeningSeconds: listening.totalListeningSeconds,
+        totalHours: Math.round((listening.totalListeningSeconds / 3600) * 10) / 10,
+        totalSongsPlayed: listening.totalSongsPlayed,
+        currentStreak: streak,
+        dailyListening: daily,
+        mostPlayedSong,
+        mostPlayedPlaylist,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Error al obtener estadísticas personales' });
+    }
   });
 
   app.get('/api/status', async (req, res) => {
