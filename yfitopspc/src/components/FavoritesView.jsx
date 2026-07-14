@@ -33,6 +33,21 @@ export default function FavoritesView() {
   const favSongs = favorites.map(id => allSongsById.get(id)).filter(Boolean);
   const [queuedId, setQueuedId] = useState(null);
 
+  // Diagnóstico: si algún favorito no se ha podido resolver a una canción
+  // real, se avisa por consola con el id exacto. Si esto aparece en la
+  // consola de la app (F12 / DevTools), significa que ese id de favorito
+  // no existe ni en la biblioteca ni en ninguna colección de carpeta
+  // (canción borrada, o los datos no se han recargado todavía). Si NO
+  // aparece nada aquí y aun así la lista sale vacía, es que esta versión
+  // de FavoritesView.jsx no es la que se está ejecutando de verdad
+  // (falta recompilar la app o el archivo no se reemplazó del todo).
+  if (favorites.length > 0 && favSongs.length < favorites.length) {
+    const missing = favorites.filter(id => !allSongsById.has(id));
+    if (missing.length > 0) {
+      console.warn('[Favoritos] IDs guardados como favoritos que no se encuentran en ninguna canción cargada:', missing);
+    }
+  }
+
   const handleAddToQueue = (song, e) => {
     e.stopPropagation();
     addToQueue(song);
