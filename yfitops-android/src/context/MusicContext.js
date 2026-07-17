@@ -111,6 +111,14 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   const [activeListeners, setActiveListeners] = useState(0);
   const [queue, setQueue]                     = useState([]); // Cola de reproducción, independiente de currentPlaylist
 
+  // ── Logros y estadísticas (datos reales del servidor) ──────────
+  const [achievements, setAchievements]               = useState([]);
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
+  const [stats, setStats]                             = useState(null);
+  const [statsLoading, setStatsLoading]                = useState(false);
+  const [achievementToasts, setAchievementToasts]     = useState([]);
+  const [rateLimitWarning, setRateLimitWarning]       = useState(null);
+
   const sound              = useRef(null);
   const nextSound          = useRef(null);
   const nextSongMeta       = useRef(null);
@@ -127,6 +135,11 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   const endTimerRef        = useRef(null);
   const advancedRef        = useRef(false);
   const queueRef           = useRef([]);
+
+  // Qué playlist/colección está sonando ahora mismo (si la hay), para que
+  // el servidor pueda contar reproducciones por playlist (estadística de
+  // "colección más escuchada"). Se lee en cada heartbeat.
+  const currentPlaylistContextRef = useRef(null); // { id, type: 'manual' | 'folder', name }
 
   // ── Guard anti doble-play ─────────────────────────────────────
   // Cada llamada a playSong recibe un token único.
@@ -148,6 +161,30 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     'Authorization': `Bearer ${tokenRef.current}`,
   });
 
+  // Procesa lo que el heartbeat pueda traer además de "cuántos oyentes hay
+  // ahora": logros nuevos desbloqueados (para la cola de notificaciones) y
+  // el aviso amistoso de "vas muy rápido" del rate limiter (ver
+  // servidor/lib/rateLimit.js). Se llama desde cualquier punto que mande
+  // un heartbeat, así que centralizarlo aquí evita tener esta lógica
+  // repetida en tres sitios distintos.
+  const handleHeartbeatExtras = (data) => {
+    if (!data) return;
+    if (typeof data.activeListeners === 'number') setActiveListeners(data.activeListeners);
+    if (Array.isArray(data.newAchievements) && data.newAchievements.length > 0) {
+      setAchievements(prev => prev.map(a => {
+        const unlocked = data.newAchievements.find(n => n.id === a.id);
+        return unlocked ? { ...a, unlocked: true, unlockedAt: new Date().toISOString(), progress: a.threshold } : a;
+      }));
+      setAchievementToasts(prev => [
+        ...prev,
+        ...data.newAchievements.map(a => ({ ...a, _toastId: `${a.id}-${Date.now()}-${Math.random()}` })),
+      ]);
+    }
+    if (data.warning) {
+      setRateLimitWarning({ message: data.warning, _toastId: `warn-${Date.now()}` });
+    }
+  };
+
   const flushPlayTime = (songId) => {
     if (!playStartTimeRef.current || !isPlayingRef.current) return;
     const elapsedMs = Date.now() - playStartTimeRef.current;
@@ -155,8 +192,12 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     if (elapsedMs < 1000) return;
     fetch(`${SERVER_URL}/api/heartbeat`, {
       method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ songId: songId || currentSongRef.current?.id, isPlaying: false, elapsedMs }),
-    }).catch(() => {});
+      body: JSON.stringify({
+        songId: songId || currentSongRef.current?.id, isPlaying: false, elapsedMs,
+        playlistId: currentPlaylistContextRef.current?.id || null,
+        playlistType: currentPlaylistContextRef.current?.type || null,
+      }),
+    }).then(r => r.json()).then(handleHeartbeatExtras).catch(() => {});
   };
 
   // ── Fuente única de verdad para "está sonando" ────────────────
@@ -312,6 +353,21 @@ export const MusicProvider = ({ children, token, onLogout }) => {
         setIsPlaying(true);
         updateNotification(nextSong, true);
 
+        // Mismo heartbeat inmediato que en playSong (ver el comentario allí):
+        // este camino rápido con audio precargado no pasa por esa función,
+        // así que hay que mandarlo aquí también para no perder el aviso al
+        // instante de un logro nuevo al avanzar de canción en automático.
+        // El contexto de playlist no cambia (seguimos en la misma), así
+        // que se reutiliza el que ya había.
+        fetch(`${SERVER_URL}/api/heartbeat`, {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify({
+            songId: nextSong.id, isPlaying: true, elapsedMs: 0,
+            playlistId: currentPlaylistContextRef.current?.id || null,
+            playlistType: currentPlaylistContextRef.current?.type || null,
+          }),
+        }).then(r => r.json()).then(handleHeartbeatExtras).catch(() => {});
+
         const durMs = (nextSong.duration || 0) * 1000;
         durationRef.current = durMs;
         if (durMs > 1000) scheduleEndTimer(durMs, 0);
@@ -352,6 +408,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     })();
 
     loadFavorites(); loadPlaylists(); fetchSongs(); fetchFolderPlaylists();
+    fetchAchievements(); fetchStats();
 
     const syncInterval = setInterval(() => {
       fetchSongs(); loadPlaylists(); fetchFolderPlaylists();
@@ -366,10 +423,14 @@ export const MusicProvider = ({ children, token, onLogout }) => {
         }
         const res = await fetch(`${SERVER_URL}/api/heartbeat`, {
           method: 'POST', headers: authHeaders(),
-          body: JSON.stringify({ songId: currentSongRef.current?.id || null, isPlaying: isPlayingRef.current, elapsedMs }),
+          body: JSON.stringify({
+            songId: currentSongRef.current?.id || null, isPlaying: isPlayingRef.current, elapsedMs,
+            playlistId: currentPlaylistContextRef.current?.id || null,
+            playlistType: currentPlaylistContextRef.current?.type || null,
+          }),
         });
         const data = await res.json();
-        if (data.activeListeners !== undefined) setActiveListeners(data.activeListeners);
+        handleHeartbeatExtras(data);
       } catch {}
     }, 30000);
 
@@ -475,7 +536,62 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     } catch {}
   };
 
-  const playSong = async (song, playlist = []) => {
+  // ── Logros y estadísticas ─────────────────────────────────────
+  // Todo viene del servidor: el catálogo (incluidos logros que un admin
+  // haya añadido desde el panel web) y el progreso real de este usuario.
+  // Nada hardcodeado en el cliente.
+  const fetchAchievements = async () => {
+    setAchievementsLoading(true);
+    try {
+      const r = await fetch(`${SERVER_URL}/api/achievements`, { headers: authHeaders() });
+      const d = await r.json();
+      setAchievements(Array.isArray(d) ? d : []);
+    } catch {} finally {
+      setAchievementsLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const r = await fetch(`${SERVER_URL}/api/stats/me`, { headers: authHeaders() });
+      const d = await r.json();
+      setStats(d);
+    } catch {} finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Reclama un logro "clientReported" (cosas que solo sabe el cliente,
+  // como una descarga offline). El servidor valida que sea reclamable;
+  // no sirve para desbloquear logros normales a mano.
+  const claimAchievement = async (achievementId) => {
+    try {
+      const r = await fetch(`${SERVER_URL}/api/achievements/${achievementId}/claim`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      const result = await r.json();
+      if (result?.ok && !result.alreadyUnlocked) {
+        setAchievements(prev => prev.map(a =>
+          a.id === achievementId ? { ...a, unlocked: true, unlockedAt: new Date().toISOString(), progress: a.threshold } : a
+        ));
+        setAchievementToasts(prev => [...prev, { ...result.achievement, _toastId: `${achievementId}-${Date.now()}` }]);
+      }
+      return result;
+    } catch {
+      return null;
+    }
+  };
+
+  const dismissAchievementToast = (toastId) => {
+    setAchievementToasts(prev => prev.filter(t => t._toastId !== toastId));
+  };
+
+  const dismissRateLimitWarning = () => {
+    setRateLimitWarning(null);
+  };
+
+  const playSong = async (song, playlist = [], playlistContext = null) => {
     // ── Token de carga ───────────────────────────────────────────
     // Incrementamos el token al inicio. Si una segunda llamada llega
     // mientras estamos haciendo createAsync, nuestro token ya no coincide
@@ -555,6 +671,23 @@ export const MusicProvider = ({ children, token, onLogout }) => {
       currentSongRef.current = song;
       setIsPlaying(true);
       updateNotification(song, true);
+      currentPlaylistContextRef.current = playlistContext;
+
+      // Heartbeat inmediato al arrancar la canción: sin esto, un logro
+      // (o el contador de "canción más escuchada") tardaría hasta 30s en
+      // reflejarse, porque si no el primer aviso de "esto está sonando"
+      // no llegaría hasta el siguiente heartbeat periódico. Es una única
+      // llamada (no hay ningún listener duplicado que la repita, a
+      // diferencia de la app de PC), así que no hay riesgo de contar la
+      // misma reproducción dos veces.
+      fetch(`${SERVER_URL}/api/heartbeat`, {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({
+          songId: song.id, isPlaying: true, elapsedMs: 0,
+          playlistId: playlistContext?.id || null,
+          playlistType: playlistContext?.type || null,
+        }),
+      }).then(r => r.json()).then(handleHeartbeatExtras).catch(() => {});
 
       if (playlist.length > 0) {
         setCurrentPlaylist(playlist);
@@ -584,21 +717,23 @@ export const MusicProvider = ({ children, token, onLogout }) => {
 
   const playNext = async () => {
     // La cola tiene prioridad, igual que al terminar una canción sola.
+    // Las canciones de la cola no pertenecen a ninguna playlist en
+    // concreto, así que se limpia el contexto.
     if (queueRef.current.length > 0) {
       const [next, ...rest] = queueRef.current;
       setQueue(rest);
       queueRef.current = rest;
       const pl = currentPlaylistRef.current;
-      await playSong(next, pl.length ? pl : [next]);
+      await playSong(next, pl.length ? pl : [next], null);
       return;
     }
     const pl = currentPlaylistRef.current;
-    if (pl.length > 0) { const n = (currentIndexRef.current + 1) % pl.length; currentIndexRef.current = n; setCurrentIndex(n); await playSong(pl[n], pl); }
+    if (pl.length > 0) { const n = (currentIndexRef.current + 1) % pl.length; currentIndexRef.current = n; setCurrentIndex(n); await playSong(pl[n], pl, currentPlaylistContextRef.current); }
   };
 
   const playPrevious = async () => {
     const pl = currentPlaylistRef.current;
-    if (pl.length > 0) { const p = currentIndexRef.current === 0 ? pl.length - 1 : currentIndexRef.current - 1; currentIndexRef.current = p; setCurrentIndex(p); await playSong(pl[p], pl); }
+    if (pl.length > 0) { const p = currentIndexRef.current === 0 ? pl.length - 1 : currentIndexRef.current - 1; currentIndexRef.current = p; setCurrentIndex(p); await playSong(pl[p], pl, currentPlaylistContextRef.current); }
   };
 
   // ── Cola de reproducción ──────────────────────────────────────
@@ -766,6 +901,8 @@ export const MusicProvider = ({ children, token, onLogout }) => {
       getFilteredSongs, getAllSongs, SERVER_URL, onLogout, activeListeners, fetchListeners,
       folderPlaylists, fetchFolderPlaylists,
       queue, addToQueue, addManyToQueue, removeFromQueue, clearQueue, moveQueueItem, playFromQueue,
+      achievements, achievementsLoading, stats, statsLoading, fetchAchievements, fetchStats, claimAchievement,
+      achievementToasts, dismissAchievementToast, rateLimitWarning, dismissRateLimitWarning,
     }}>
       {children}
     </MusicContext.Provider>

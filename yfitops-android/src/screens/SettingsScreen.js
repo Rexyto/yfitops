@@ -1,6 +1,6 @@
-import React, { useContext, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, Linking,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, Linking, TextInput,
 } from 'react-native';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,20 +31,25 @@ function DownloadableRow({ playlist, type, allSongs, isOnline, SERVER_URL, style
     isPlaylistDownloaded, downloadPlaylist, removeOfflinePlaylist,
     downloadingIds, downloadProgress,
   } = useSettings();
+  const { claimAchievement } = useContext(MusicContext);
 
   const downloaded = isPlaylistDownloaded(playlist.id);
   const downloading = downloadingIds.includes(playlist.id);
   const progress = downloadProgress[playlist.id];
   const count = playlist.songs?.length ?? 0;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const resolved = resolveSongsForPlaylist(playlist, type, allSongs)
       .map(s => ({ ...s, _fullUrl: `${SERVER_URL}${s.url}` }));
     if (resolved.length === 0) return;
-    downloadPlaylist(
+    await downloadPlaylist(
       { id: playlist.id, name: playlist.name, type, coverColor: playlist.coverColor, coverUrl: playlist.coverUrl, totalDuration: playlist.totalDuration },
       resolved,
     );
+    // Logro "Modo Avión": se reclama en el servidor. Es idempotente (si ya
+    // estaba desbloqueado, el servidor simplemente no hace nada), así que
+    // no hace falta comprobar aquí si es la primera descarga o no.
+    claimAchievement('offline_first');
   };
 
   return (
@@ -85,6 +90,9 @@ export default function SettingsScreen({ onLogout }) {
     language, setLanguage, isOnline, offlinePlaylists,
     cacheBytes, cacheSizeLabel, clearCache,
   } = useSettings();
+  const {
+    achievements, achievementsLoading, stats, statsLoading, fetchAchievements, fetchStats,
+  } = useContext(MusicContext);
   const { theme, setTheme, colors } = useTheme();
   const t = useT();
   const styles = makeStyles(colors);
@@ -93,6 +101,17 @@ export default function SettingsScreen({ onLogout }) {
   const [error, setError] = useState('');
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [achSearch, setAchSearch] = useState('');
+  const [achStatusFilter, setAchStatusFilter] = useState('all'); // all | unlocked | locked
+  const [achCategoryFilter, setAchCategoryFilter] = useState('all');
+
+  // Refresca logros/estadísticas cada vez que se entra en Ajustes (esta
+  // pantalla se desmonta al cambiar de pestaña, así que esto equivale a
+  // "refrescar al abrir", igual que en la app de PC).
+  React.useEffect(() => {
+    fetchAchievements();
+    fetchStats();
+  }, []);
 
   const scrollRef = useRef(null);
   const sectionY = useRef({});
@@ -123,8 +142,36 @@ export default function SettingsScreen({ onLogout }) {
   const totalOfflineCount = offlinePlaylists.length;
   const appVersion = Constants.expoConfig?.version || '—';
 
+  // ── Estadísticas: reales, calculadas por el servidor a partir del
+  // historial de escucha (nada de valores de relleno). ─────────────
+  const fmtSeconds = (totalSeconds) => {
+    if (!totalSeconds) return '0 min';
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    return h > 0 ? t('settings.stats.hoursMinutes', h, m) : t('settings.stats.minutesOnly', m);
+  };
+  const statCards = [
+    { icon: '🎧', label: t('settings.stats.songsPlayed'), value: stats ? stats.totalSongsPlayed : '—' },
+    { icon: '⏱️', label: t('settings.stats.totalTime'), value: stats ? fmtSeconds(stats.totalListeningSeconds) : '—' },
+    { icon: '🔥', label: t('settings.stats.streak'), value: stats ? t('settings.stats.streakDays', stats.currentStreak) : '—' },
+  ];
+
+  // ── Catálogo de logros: 100% dinámico, viene del servidor tal cual
+  // (icono, título, descripción, umbral, progreso actual). Si se crea un
+  // logro nuevo desde el panel web, aparece aquí solo con recargar. ────
+  const achCategories = [...new Set(achievements.map(a => a.category).filter(Boolean))];
+  const filteredAchievements = achievements.filter(a => {
+    if (achStatusFilter === 'unlocked' && !a.unlocked) return false;
+    if (achStatusFilter === 'locked' && a.unlocked) return false;
+    if (achCategoryFilter !== 'all' && a.category !== achCategoryFilter) return false;
+    if (achSearch && !`${a.title} ${a.description}`.toLowerCase().includes(achSearch.toLowerCase())) return false;
+    return true;
+  });
+  const achUnlockedCount = achievements.filter(a => a.unlocked).length;
+
   const INDEX = [
     { id: 'profile', icon: '👤', label: t('settings.index.profile') },
+    { id: 'stats', icon: '🏆', label: t('settings.index.stats') },
     { id: 'appearance', icon: '🎨', label: t('settings.index.appearance') },
     { id: 'downloads', icon: '⬇️', label: t('settings.index.downloads') },
     { id: 'storage', icon: '💾', label: t('settings.index.storage') },
@@ -176,6 +223,125 @@ export default function SettingsScreen({ onLogout }) {
             </View>
           </View>
           {!!error && <Text style={styles.errorText}>{error}</Text>}
+        </Section>
+
+        {/* Logros y estadísticas */}
+        <Section c={colors} styles={styles} onLayout={captureY('stats')} title={t('settings.stats.title')} subtitle={t('settings.stats.subtitle')}>
+          <View style={styles.statsGrid}>
+            {statCards.map((s, i) => (
+              <View key={i} style={styles.statCard}>
+                <Text style={styles.statIcon}>{s.icon}</Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.statValue}>{s.value}</Text>
+                  <Text style={styles.statLabel}>{s.label}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.highlightGrid}>
+            <View style={styles.highlightCard}>
+              <Text style={styles.highlightLabel}>🎵 {t('settings.stats.mostPlayedSong')}</Text>
+              {stats?.mostPlayedSong ? (
+                <>
+                  <Text style={styles.highlightTitle} numberOfLines={1}>{stats.mostPlayedSong.title}</Text>
+                  <Text style={styles.highlightSubtitle} numberOfLines={1}>{stats.mostPlayedSong.artist}</Text>
+                  <Text style={styles.highlightPlays}>{stats.mostPlayedSong.playCount}</Text>
+                </>
+              ) : (
+                <Text style={styles.highlightEmpty}>{statsLoading ? t('settings.stats.loading') : t('settings.stats.noDataYet')}</Text>
+              )}
+            </View>
+            <View style={styles.highlightCard}>
+              <Text style={styles.highlightLabel}>📻 {t('settings.stats.mostPlayedPlaylist')}</Text>
+              {stats?.mostPlayedPlaylist ? (
+                <>
+                  <Text style={styles.highlightTitle} numberOfLines={1}>{stats.mostPlayedPlaylist.name}</Text>
+                  <Text style={styles.highlightSubtitle} numberOfLines={1}>
+                    {stats.mostPlayedPlaylist.type === 'folder' ? t('settings.stats.collectionTypeFolder') : t('settings.stats.collectionTypeManual')}
+                  </Text>
+                  <Text style={styles.highlightPlays}>{stats.mostPlayedPlaylist.playCount}</Text>
+                </>
+              ) : (
+                <Text style={styles.highlightEmpty}>{statsLoading ? t('settings.stats.loading') : t('settings.stats.noDataYet')}</Text>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.achDivider} />
+
+          <View style={styles.achHeadRow}>
+            <Text style={styles.achTitle}>{t('settings.achievements.title')}</Text>
+            <View style={styles.achBadgeCount}>
+              <Text style={styles.achBadgeCountText}>{t('settings.achievements.unlocked', achUnlockedCount, achievements.length)}</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionSubtitle}>{t('settings.achievements.subtitle')}</Text>
+
+          <TextInput
+            style={styles.achSearch}
+            placeholder={t('settings.achievements.searchPlaceholder')}
+            placeholderTextColor={colors.textDim}
+            value={achSearch}
+            onChangeText={setAchSearch}
+          />
+
+          <View style={styles.achChips}>
+            {['all', 'unlocked', 'locked'].map(f => (
+              <TouchableOpacity
+                key={f}
+                style={[styles.achChip, achStatusFilter === f && styles.achChipActive]}
+                onPress={() => setAchStatusFilter(f)}
+              >
+                <Text style={[styles.achChipText, achStatusFilter === f && styles.achChipTextActive]}>{t(`settings.achievements.filter.${f}`)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {achCategories.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <View style={styles.achChips}>
+                <TouchableOpacity style={[styles.achChip, achCategoryFilter === 'all' && styles.achChipActive]} onPress={() => setAchCategoryFilter('all')}>
+                  <Text style={[styles.achChipText, achCategoryFilter === 'all' && styles.achChipTextActive]}>{t('settings.achievements.category.all')}</Text>
+                </TouchableOpacity>
+                {achCategories.map(cat => (
+                  <TouchableOpacity key={cat} style={[styles.achChip, achCategoryFilter === cat && styles.achChipActive]} onPress={() => setAchCategoryFilter(cat)}>
+                    <Text style={[styles.achChipText, achCategoryFilter === cat && styles.achChipTextActive]}>{t(`settings.achievements.category.${cat}`)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          )}
+
+          {achievementsLoading && achievements.length === 0 ? (
+            <Text style={styles.achEmptyText}>{t('settings.achievements.loading')}</Text>
+          ) : filteredAchievements.length === 0 ? (
+            <Text style={styles.achEmptyText}>{t('settings.achievements.noResults')}</Text>
+          ) : (
+            filteredAchievements.map(a => {
+              const pct = a.threshold > 0 ? Math.min(100, (a.progress / a.threshold) * 100) : 0;
+              return (
+                <View key={a.id} style={[styles.achRow, a.unlocked && styles.achRowUnlocked]}>
+                  <View style={[styles.achIconWrap, a.unlocked && styles.achIconWrapUnlocked]}>
+                    <Text style={styles.achIcon}>{a.unlocked ? a.icon : '🔒'}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.achRowTitle, !a.unlocked && styles.achRowTitleLocked]}>{a.title}</Text>
+                    <Text style={styles.achRowDesc}>{a.description}</Text>
+                    {!a.unlocked && a.threshold > 1 && (
+                      <View style={styles.achProgressWrap}>
+                        <View style={styles.achProgressTrack}>
+                          <View style={[styles.achProgressFill, { width: `${pct}%` }]} />
+                        </View>
+                        <Text style={styles.achProgressText}>{Math.floor(a.progress)}/{a.threshold}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {a.unlocked && <Text style={styles.achCheck}>✓</Text>}
+                </View>
+              );
+            })
+          )}
         </Section>
 
         {/* Apariencia */}
@@ -375,4 +541,53 @@ const makeStyles = (c) => StyleSheet.create({
 
   logoutRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 20, marginBottom: 20 },
   logoutText: { color: '#ff4444', fontWeight: '700', fontSize: 14 },
+
+  // Estadísticas
+  sectionSubtitle: { color: c.textDim, fontSize: 12, marginTop: -8, marginBottom: 14 },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  statCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, flexGrow: 1, flexBasis: '30%',
+    backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 12, padding: 12,
+  },
+  statIcon: { fontSize: 20 },
+  statValue: { color: c.text, fontSize: 17, fontWeight: '800' },
+  statLabel: { color: c.textDim, fontSize: 10.5, fontWeight: '600', marginTop: 1 },
+
+  highlightGrid: { gap: 10, marginBottom: 4 },
+  highlightCard: { backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 12, padding: 14, position: 'relative' },
+  highlightLabel: { color: c.textDim, fontSize: 10.5, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  highlightTitle: { color: c.text, fontSize: 15, fontWeight: '800' },
+  highlightSubtitle: { color: c.textDim, fontSize: 12.5, marginTop: 1 },
+  highlightPlays: { position: 'absolute', top: 12, right: 14, color: '#1ed760', fontSize: 11, fontWeight: '800' },
+  highlightEmpty: { color: c.textFaint, fontSize: 13 },
+
+  achDivider: { height: 1, backgroundColor: c.border, marginVertical: 16 },
+  achHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  achTitle: { color: c.text, fontSize: 15, fontWeight: '800' },
+  achBadgeCount: { backgroundColor: '#1ed76015', borderWidth: 1, borderColor: '#1ed76030', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  achBadgeCountText: { color: '#1ed760', fontSize: 11, fontWeight: '700' },
+  achSearch: { backgroundColor: c.bg4, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, color: c.text, fontSize: 13.5, marginBottom: 10 },
+  achChips: { flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' },
+  achChip: { backgroundColor: c.bg4, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 20, paddingHorizontal: 13, paddingVertical: 6 },
+  achChipActive: { backgroundColor: '#1ed76020', borderColor: '#1ed76060' },
+  achChipText: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
+  achChipTextActive: { color: '#1ed760' },
+  achEmptyText: { color: c.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },
+  achRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 12,
+    padding: 12, marginBottom: 8, opacity: 0.75, position: 'relative',
+  },
+  achRowUnlocked: { opacity: 1, borderColor: '#1ed76040' },
+  achIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: c.bg4, justifyContent: 'center', alignItems: 'center' },
+  achIconWrapUnlocked: { backgroundColor: '#1ed76020' },
+  achIcon: { fontSize: 17 },
+  achRowTitle: { color: c.text, fontSize: 13.5, fontWeight: '700' },
+  achRowTitleLocked: { color: c.textMuted },
+  achRowDesc: { color: c.textDim, fontSize: 11.5, marginTop: 2, lineHeight: 15 },
+  achProgressWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  achProgressTrack: { flex: 1, height: 4, backgroundColor: c.bg4, borderRadius: 2, overflow: 'hidden' },
+  achProgressFill: { height: '100%', backgroundColor: '#1ed760', borderRadius: 2 },
+  achProgressText: { color: c.textFaint, fontSize: 10, fontWeight: '700' },
+  achCheck: { position: 'absolute', top: 10, right: 10, color: '#1ed760', fontSize: 13, fontWeight: '900' },
 });

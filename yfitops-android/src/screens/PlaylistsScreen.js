@@ -333,13 +333,17 @@ export default function PlaylistsScreen() {
       ? allPlSongs.filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase()) || s.artist.toLowerCase().includes(searchQuery.toLowerCase()))
       : allPlSongs;
 
+    // Se manda al servidor en cada heartbeat mientras suena una canción de
+    // esta colección, para la estadística de "colección más escuchada".
+    const playlistContext = { id: selectedPlaylist.id, type: 'manual', name: selectedPlaylist.name };
+
     return (
       <View style={styles.container}>
         <PlaylistDetailHeader
           playlist={selectedPlaylist} songCount={filteredSongs.length} color={color}
           onBack={() => setView('list')}
-          onPlayAll={() => allPlSongs.length > 0 && playSong(allPlSongs[0], allPlSongs)}
-          onShuffle={() => { if (allPlSongs.length === 0) return; const s = shuffle(allPlSongs); playSong(s[0], s); }}
+          onPlayAll={() => allPlSongs.length > 0 && playSong(allPlSongs[0], allPlSongs, playlistContext)}
+          onShuffle={() => { if (allPlSongs.length === 0) return; const s = shuffle(allPlSongs); playSong(s[0], s, playlistContext); }}
           searchVisible={searchVisible}
           onToggleSearch={() => { setSearchVisible(v => !v); setSearchQuery(''); }}
           searchQuery={searchQuery} onSearchChange={setSearchQuery}
@@ -354,7 +358,7 @@ export default function PlaylistsScreen() {
               <PlaylistSongRow
                 item={item} index={index}
                 isActive={isActive} isPlaying={isPlaying && isActive}
-                onPress={() => playSong(item, filteredSongs.length > 0 ? filteredSongs : allPlSongs)}
+                onPress={() => playSong(item, filteredSongs.length > 0 ? filteredSongs : allPlSongs, playlistContext)}
                 onFavoritePress={() => toggleFavorite(item.id)}
                 onQueuePress={() => addToQueue(item)}
                 isFavorite={favorites.includes(item.id)}
@@ -384,6 +388,10 @@ export default function PlaylistsScreen() {
       ? plSongs.filter(s => s.title?.toLowerCase().includes(searchQuery.toLowerCase()) || s.artist?.toLowerCase().includes(searchQuery.toLowerCase()))
       : plSongs;
 
+    // Se manda al servidor en cada heartbeat mientras suena una canción de
+    // esta colección, para la estadística de "colección más escuchada".
+    const playlistContext = { id: selectedFolder.id, type: 'folder', name: selectedFolder.name };
+
     return (
       <View style={styles.container}>
         {/* Hero */}
@@ -412,10 +420,10 @@ export default function PlaylistsScreen() {
             <Text style={styles.folderStats}>{t('playlists.songCount', filteredFolderSongs.length)} · {fmtTotal(selectedFolder.totalDuration)}</Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity onPress={() => { if (!plSongs.length) return; const s = shuffle(plSongs); playSong(s[0], s); }} style={[styles.actionBtn, { borderColor: '#1ed76066' }]}>
+            <TouchableOpacity onPress={() => { if (!plSongs.length) return; const s = shuffle(plSongs); playSong(s[0], s, playlistContext); }} style={[styles.actionBtn, { borderColor: '#1ed76066' }]}>
               <Text style={[styles.actionBtnText, { color: '#1ed760' }]}>{t('playlists.shuffle')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => plSongs.length > 0 && playSong(plSongs[0], plSongs)} style={[styles.actionBtn, { backgroundColor: '#1ed760', borderColor: '#1ed760' }]}>
+            <TouchableOpacity onPress={() => plSongs.length > 0 && playSong(plSongs[0], plSongs, playlistContext)} style={[styles.actionBtn, { backgroundColor: '#1ed760', borderColor: '#1ed760' }]}>
               <Text style={[styles.actionBtnText, { color: '#000' }]}>{t('playlists.play')}</Text>
             </TouchableOpacity>
           </View>
@@ -433,7 +441,7 @@ export default function PlaylistsScreen() {
               <PlaylistSongRow
                 item={item} index={index}
                 isActive={isActive} isPlaying={isPlaying && isActive}
-                onPress={() => playSong(item, filteredFolderSongs.length > 0 ? filteredFolderSongs : plSongs)}
+                onPress={() => playSong(item, filteredFolderSongs.length > 0 ? filteredFolderSongs : plSongs, playlistContext)}
                 onFavoritePress={() => toggleFavorite(item.id)}
                 onQueuePress={() => addToQueue(item)}
                 isFavorite={favorites.includes(item.id)}

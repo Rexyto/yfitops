@@ -10,11 +10,13 @@ import { MusicProvider } from './src/context/MusicContext';
 import { ThemeProvider, useTheme } from './src/theme';
 import { SettingsProvider, useSettings } from './src/context/SettingsContext';
 import { useT } from './src/i18n';
+import AchievementToast from './src/components/AchievementToast';
+import RateLimitWarningToast from './src/components/RateLimitWarningToast';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || 'https://yfitops.duckdns.org';
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 export default function App() {
   return (
@@ -153,6 +155,8 @@ function AppInner() {
       {token ? (
         <MusicProvider token={token} onLogout={handleLogout}>
           <MainScreen onLogout={handleLogout} />
+          <AchievementToast />
+          <RateLimitWarningToast />
           <StatusBar style={statusBarStyle} backgroundColor={colors.bg0} />
         </MusicProvider>
       ) : (

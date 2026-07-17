@@ -98,6 +98,49 @@ const es = {
   'settings.index.credits': 'Créditos',
   'settings.index.version': 'Versión',
 
+  // Logros y estadísticas (todas son datos reales del servidor)
+  'settings.index.stats': 'Logros',
+  'settings.stats.title': 'Logros y estadísticas',
+  'settings.stats.subtitle': 'Tu actividad dentro de YFitops',
+  'settings.stats.songsPlayed': 'Canciones escuchadas',
+  'settings.stats.totalTime': 'Tiempo total',
+  'settings.stats.streak': 'Racha de días',
+  'settings.stats.streakDays': (n) => n === 1 ? '1 día' : `${n} días`,
+  'settings.stats.hoursMinutes': (h, m) => `${h}h ${m}min`,
+  'settings.stats.minutesOnly': (m) => `${m} min`,
+  'settings.stats.loading': 'Cargando...',
+  'settings.stats.noDataYet': 'Aún sin datos',
+  'settings.stats.mostPlayedSong': 'Canción más escuchada',
+  'settings.stats.mostPlayedPlaylist': 'Colección más escuchada',
+  'settings.stats.collectionTypeFolder': 'Colección de carpeta',
+  'settings.stats.collectionTypeManual': 'Playlist propia',
+
+  // El catálogo de logros (icono, título, descripción, progreso) viene
+  // siempre del servidor: no hay ningún logro fijo en el cliente. Un
+  // administrador puede crear, editar o quitar logros desde el panel web
+  // sin necesidad de actualizar la app.
+  'settings.achievements.title': 'Logros',
+  'settings.achievements.subtitle': 'Desbloquea logros usando la app',
+  'settings.achievements.unlocked': (n, total) => `${n}/${total} desbloqueados`,
+  'settings.achievements.searchPlaceholder': 'Buscar logro...',
+  'settings.achievements.loading': 'Cargando logros...',
+  'settings.achievements.noResults': 'Ningún logro coincide con el filtro',
+  'settings.achievements.filter.all': 'Todos',
+  'settings.achievements.filter.unlocked': 'Desbloqueados',
+  'settings.achievements.filter.locked': 'Bloqueados',
+  'settings.achievements.category.all': 'Todas',
+  'settings.achievements.category.general': 'General',
+  'settings.achievements.category.listening': 'Escucha',
+  'settings.achievements.category.time': 'Tiempo',
+  'settings.achievements.category.streak': 'Racha',
+  'settings.achievements.category.favorites': 'Favoritos',
+  'settings.achievements.category.playlists': 'Playlists',
+  'settings.achievements.category.library': 'Biblioteca',
+  'settings.achievements.category.offline': 'Sin conexión',
+
+  // Notificación de logro desbloqueado (toast)
+  'achievements.toast.unlocked': '¡Logro desbloqueado!',
+
   'settings.profile.title': 'Perfil',
   'settings.profile.subtitle': 'Tu foto se guarda solo en este dispositivo, nunca se sube al servidor',
   'settings.profile.upload': 'Subir foto',
@@ -253,6 +296,49 @@ const en = {
   'settings.index.storage': 'Storage',
   'settings.index.credits': 'Credits',
   'settings.index.version': 'Version',
+
+  // Achievements and stats (all real data from the server)
+  'settings.index.stats': 'Achievements',
+  'settings.stats.title': 'Achievements & stats',
+  'settings.stats.subtitle': 'Your activity within YFitops',
+  'settings.stats.songsPlayed': 'Songs played',
+  'settings.stats.totalTime': 'Total time',
+  'settings.stats.streak': 'Day streak',
+  'settings.stats.streakDays': (n) => n === 1 ? '1 day' : `${n} days`,
+  'settings.stats.hoursMinutes': (h, m) => `${h}h ${m}min`,
+  'settings.stats.minutesOnly': (m) => `${m} min`,
+  'settings.stats.loading': 'Loading...',
+  'settings.stats.noDataYet': 'No data yet',
+  'settings.stats.mostPlayedSong': 'Most played song',
+  'settings.stats.mostPlayedPlaylist': 'Most played collection',
+  'settings.stats.collectionTypeFolder': 'Folder collection',
+  'settings.stats.collectionTypeManual': 'Your playlist',
+
+  // The achievement catalog (icon, title, description, progress) always
+  // comes from the server: nothing is hardcoded on the client. An admin
+  // can create, edit, or remove achievements from the web panel without
+  // needing an app update.
+  'settings.achievements.title': 'Achievements',
+  'settings.achievements.subtitle': 'Unlock achievements by using the app',
+  'settings.achievements.unlocked': (n, total) => `${n}/${total} unlocked`,
+  'settings.achievements.searchPlaceholder': 'Search achievement...',
+  'settings.achievements.loading': 'Loading achievements...',
+  'settings.achievements.noResults': 'No achievement matches this filter',
+  'settings.achievements.filter.all': 'All',
+  'settings.achievements.filter.unlocked': 'Unlocked',
+  'settings.achievements.filter.locked': 'Locked',
+  'settings.achievements.category.all': 'All',
+  'settings.achievements.category.general': 'General',
+  'settings.achievements.category.listening': 'Listening',
+  'settings.achievements.category.time': 'Time',
+  'settings.achievements.category.streak': 'Streak',
+  'settings.achievements.category.favorites': 'Favorites',
+  'settings.achievements.category.playlists': 'Playlists',
+  'settings.achievements.category.library': 'Library',
+  'settings.achievements.category.offline': 'Offline',
+
+  // Achievement unlocked notification (toast)
+  'achievements.toast.unlocked': 'Achievement unlocked!',
 
   'settings.profile.title': 'Profile',
   'settings.profile.subtitle': 'Your photo is stored only on this device, never uploaded to the server',

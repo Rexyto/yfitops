@@ -381,10 +381,10 @@ yfitops/
 │   └── src/
 │       ├── theme.js             # Los 11 temas de color (mismos que la app de PC) + contexto
 │       ├── i18n/
-│       │   ├── translations.js  # Textos ES/EN de toda la interfaz
+│       │   ├── translations.js  # Textos ES/EN de toda la interfaz (incluye logros/estadísticas)
 │       │   └── index.js         # Hook useT()
 │       ├── context/
-│       │   ├── MusicContext.js    # Estado global: sesión, biblioteca, reproductor (expo-av), notificación, heartbeat
+│       │   ├── MusicContext.js    # Estado global: sesión, biblioteca, reproductor (expo-av), notificación, heartbeat con contexto de playlist, logros y estadísticas
 │       │   └── SettingsContext.js # Tema, idioma, foto de perfil, conectividad, descargas offline y caché
 │       ├── screens/
 │       │   ├── LoginScreen.js
@@ -392,13 +392,15 @@ yfitops/
 │       │   ├── SongsScreen.js
 │       │   ├── FavoritesScreen.js
 │       │   ├── PlaylistsScreen.js
-│       │   └── SettingsScreen.js  # Perfil, apariencia, descargas offline, almacenamiento, créditos, versión
+│       │   └── SettingsScreen.js  # Perfil, logros y estadísticas reales, apariencia, descargas offline, almacenamiento, créditos, versión
 │       └── components/
 │           ├── Icon.js            # Iconos por emoji/texto (sin dependencias nativas de iconografía)
 │           ├── MarqueeText.js
 │           ├── PlayerBar.js
 │           ├── PlayerModal.js
-│           └── SongItem.js
+│           ├── SongItem.js
+│           ├── AchievementToast.js     # Notificación emergente al desbloquear un logro nuevo
+│           └── RateLimitWarningToast.js # Aviso amistoso cuando el servidor detecta que se están mandando peticiones muy seguido
 │
 ├── servidor/                   # Backend (Node.js + Express + MySQL)
 │   ├── server.js               # Punto de entrada del backend (monta rate limiting + rutas)
@@ -517,7 +519,7 @@ yfitops/
 
 > El servidor guarda las carátulas de las canciones en `servidor/portadas/`. Es una carpeta más a tener en cuenta junto a `canciones/` y `playlist/` a la hora de hacer backups o desplegar.
 >
-> Nota: los logros y estadísticas reales (backend + `ProfileView.jsx`/`AchievementToast.jsx`) están implementados en **servidor** y en la **app de PC**. La app móvil (Android) y la de Samsung TV todavía no consumen estos endpoints nuevos, usan las rutas `/api/*` y `/pc/*` de siempre, así que seguirán funcionando igual, simplemente no muestran logros/estadísticas por ahora.
+> Nota: los logros y estadísticas reales (backend + `ProfileView.jsx`/`AchievementToast.jsx` en PC, `SettingsScreen.js` + `AchievementToast.js` en Android) están implementados en **servidor**, en la **app de PC** y en la **app móvil (Android)**. La app de Samsung TV todavía no consume estos endpoints nuevos, sigue usando las rutas `/pc/*` de siempre, así que seguirá funcionando igual, simplemente no muestra logros/estadísticas por ahora.
 
 ---
 
@@ -810,7 +812,7 @@ La app móvil (`yfitops-android/`) es una aplicación **Expo + React Native** qu
 
 Comparte la misma filosofía que la app de PC: mismos 11 temas de color, mismo sistema de idiomas (ES/EN), descargas offline y foto de perfil solo-local. La única diferencia real de plataforma es que no tiene sentido un "inicio con el sistema" en un móvil, así que esa función no existe aquí.
 
-> Al igual que la app de Samsung TV, todavía no tiene la pantalla de logros/estadísticas reales que sí tiene la app de PC — usa `/api/*` solo para lo de siempre.
+> Desde la v1.3.0 incluye logros y estadísticas reales (ver [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario)), en una sección nueva dentro de Ajustes ("Logros"). No es una pantalla separada como en PC — se integra como una sección más de `SettingsScreen.js`, siguiendo el mismo patrón de secciones (Perfil, Apariencia, Descargas...) que ya tenía esa pantalla.
 
 ### Requisitos
 
@@ -889,12 +891,12 @@ Igual que con el `.exe`/`AppImage` de PC: sube el `.apk` generado a donde lo sir
 | `app.json` | Configuración de Expo: nombre, iconos, permisos de Android (notificaciones, servicio en primer plano, arranque al encender), plugins. |
 | `eas.json` | Perfiles de compilación (`development`/`preview`/`production`) usados por EAS Build. |
 | `plugins/withMusicForegroundService.js` | Config plugin que añade al `AndroidManifest.xml` el servicio en primer plano de reproducción y el receptor de botones de medios (auriculares, notificación). |
-| `src/context/MusicContext.js` | Estado global del reproductor (`expo-av`): cola, favoritos, heartbeat, notificación con controles de reproducción, reacciona al estado real de reproducción (interrupciones, llamadas, otras apps) en vez de fiarse de temporizadores manuales, y reproduce desde disco si la canción está descargada. |
+| `src/context/MusicContext.js` | Estado global del reproductor (`expo-av`): cola, favoritos, heartbeat (con el contexto de playlist activo) y su versión inmediata al arrancar una canción para que los logros no tarden hasta 30s en reflejarse, notificación con controles de reproducción, reacciona al estado real de reproducción (interrupciones, llamadas, otras apps) en vez de fiarse de temporizadores manuales, y reproduce desde disco si la canción está descargada. También guarda el catálogo de logros y las estadísticas del usuario, y gestiona la cola de notificaciones de logros recién desbloqueados y el aviso de rate limit. |
 | `src/context/SettingsContext.js` | Tema (11 colores), idioma, foto de perfil (solo local, vía `expo-file-system`), conectividad (`@react-native-community/netinfo`) y descargas offline/caché. |
 | `src/theme.js` | Las 11 paletas de color, iguales a las de la app de PC. |
-| `src/i18n/` | Textos ES/EN de toda la interfaz. |
-| `src/screens/` | Pantallas: login, biblioteca, favoritos, colecciones, ajustes. |
-| `src/components/` | Barra y modal del reproductor, fila de canción, texto con marquesina para títulos largos, iconos. |
+| `src/i18n/` | Textos ES/EN de toda la interfaz (incluye logros/estadísticas). |
+| `src/screens/` | Pantallas: login, biblioteca, favoritos, colecciones, ajustes (con la sección nueva "Logros" de estadísticas + catálogo de logros reales). |
+| `src/components/` | Barra y modal del reproductor, fila de canción, texto con marquesina para títulos largos, iconos, el toast de logro desbloqueado y el aviso de rate limit. |
 
 ### Notas de la app móvil
 
@@ -902,6 +904,7 @@ Igual que con el `.exe`/`AppImage` de PC: sube el `.apk` generado a donde lo sir
 - El reproductor comprueba primero si la canción está descargada en disco antes de hacer streaming; si no lo está, sigue funcionando igual que siempre mientras haya conexión.
 - La notificación de reproducción (con los controles de anterior/pausa/siguiente) se mantiene sincronizada con el estado real del audio nativo, así que también refleja correctamente pausas provocadas por el sistema (una llamada entrante, otra app tomando el audio, etc.), no solo las que inicia el usuario desde la app.
 - El indicador de "sin conexión" usa `@react-native-community/netinfo`, que reacciona a cambios de red en tiempo real sin necesidad de peticiones de comprobación.
+- Los **logros y estadísticas** (Ajustes → Logros) sí se sincronizan con el servidor — es la única sección de Ajustes que no es solo-local. Ver [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario).
 
 ---
 
@@ -1055,7 +1058,7 @@ Todos siguen el mismo esquema de autenticación que el resto de rutas de su pref
 | `DELETE /web/achievements/:id` | Borrar un logro del catálogo (requiere `superadmin`) |
 | `GET /web/users/:id/stats` | Ver desde el panel las estadísticas y el número de logros de un usuario concreto (soporte/administración) |
 
-Actualmente esto está implementado en el **servidor** y en la **app de PC** (`ProfileView.jsx` + `AchievementToast.jsx`); Android y Samsung TV siguen sin esta pantalla, ver las notas de sus secciones respectivas más arriba.
+Actualmente esto está implementado en el **servidor**, en la **app de PC** (`ProfileView.jsx` + `AchievementToast.jsx`) y en la **app móvil Android** (sección "Logros y estadísticas" de `SettingsScreen.js` + `AchievementToast.js`); Samsung TV sigue sin esta pantalla, ver las notas de su sección más arriba.
 
 ---
 
@@ -1327,4 +1330,4 @@ POST /api/sync
 
 Privada — YFitops 2026
 
-*Última actualización: 13 de julio de 2026*
+*Última actualización: 16 de julio de 2026*
