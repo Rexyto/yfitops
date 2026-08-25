@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from './store/MusicStore';
 import useSettingsStore from './store/SettingsStore';
 import { useT } from './i18n';
@@ -69,7 +70,17 @@ function OfflineBanner() {
 }
 
 export default function App() {
-  const { token, login, currentSong } = useMusicStore();
+  // Selector con comparación superficial: sin esto, App() (y por tanto
+  // TODA la app, ya que React re-renderiza los hijos por defecto)
+  // se volvía a renderizar 4 veces por segundo mientras sonaba una
+  // canción, porque el store también guarda "position" (el progreso de
+  // la barra) y cualquier cambio en el store, aunque sea uno que este
+  // componente no usa, disparaba el render. Con el selector, App solo
+  // reacciona cuando token/login/currentSong cambian de verdad.
+  const { token, login, currentSong } = useMusicStore(
+    state => ({ token: state.token, login: state.login, currentSong: state.currentSong }),
+    shallow
+  );
   const { isOnline } = useSettingsStore();
   const t = useT();
   const [tab, setTab] = useState('songs');

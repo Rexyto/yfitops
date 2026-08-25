@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from '../store/MusicStore';
 import useSettingsStore from '../store/SettingsStore';
 import { useT } from '../i18n';
@@ -61,7 +62,13 @@ function PlaylistCard({ playlist, type, onClick, isDownloaded }) {
 
 // ── Vista detalle de playlist ────────────────────────────────
 function PlaylistDetail({ playlist, type, songs, isDownloaded, onBack }) {
-  const { playSong, playShuffle, toggleFavorite, favorites, addToQueue, addManyToQueue } = useMusicStore();
+  const { playSong, playShuffle, toggleFavorite, favorites, addToQueue, addManyToQueue } = useMusicStore(
+    state => ({
+      playSong: state.playSong, playShuffle: state.playShuffle, toggleFavorite: state.toggleFavorite,
+      favorites: state.favorites, addToQueue: state.addToQueue, addManyToQueue: state.addManyToQueue,
+    }),
+    shallow
+  );
   const { downloadedSongIds } = useSettingsStore();
   const t = useT();
   const [search, setSearch] = useState('');
@@ -216,7 +223,10 @@ function PlaylistDetail({ playlist, type, songs, isDownloaded, onBack }) {
 
 // ── Componente principal ─────────────────────────────────────
 export default function PlaylistsView() {
-  const { playlists, folderPlaylists, songs } = useMusicStore();
+  const { playlists, folderPlaylists, songs } = useMusicStore(
+    state => ({ playlists: state.playlists, folderPlaylists: state.folderPlaylists, songs: state.songs }),
+    shallow
+  );
   const { isPlaylistDownloaded } = useSettingsStore();
   const t = useT();
   const [detail, setDetail] = useState(null); // { type, playlist }

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from '../store/MusicStore';
 import { useT } from '../i18n';
 
@@ -10,7 +11,10 @@ const AUTO_DISMISS_MS = 6000;
 // servidor: no está hardcodeado ni traducido en el cliente, ya que un
 // admin puede crear logros nuevos desde el panel web en cualquier momento.
 export default function AchievementToast() {
-  const { achievementToasts, dismissAchievementToast } = useMusicStore();
+  const { achievementToasts, dismissAchievementToast } = useMusicStore(
+    state => ({ achievementToasts: state.achievementToasts, dismissAchievementToast: state.dismissAchievementToast }),
+    shallow
+  );
   const t = useT();
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from '../store/MusicStore';
 import useSettingsStore from '../store/SettingsStore';
 import { useT } from '../i18n';
@@ -74,7 +75,16 @@ export default function ProfileView() {
     username,
     achievements, achievementsLoading, stats, statsLoading,
     fetchAchievements, fetchStats, claimAchievement,
-  } = useMusicStore();
+  } = useMusicStore(
+    state => ({
+      username: state.username,
+      achievements: state.achievements, achievementsLoading: state.achievementsLoading,
+      stats: state.stats, statsLoading: state.statsLoading,
+      fetchAchievements: state.fetchAchievements, fetchStats: state.fetchStats,
+      claimAchievement: state.claimAchievement,
+    }),
+    shallow
+  );
   const { profilePicture, uploadProfilePicture, removeProfilePicture, offlinePlaylists } = useSettingsStore();
   const t = useT();
 

@@ -15,15 +15,11 @@ function isNight(date = new Date()) {
   return h >= 0 && h < 6;
 }
 
-// ─────────────────────────────────────────────────────────────
-// REGISTRO DE ESCUCHA (llamado desde /heartbeat)
-// ─────────────────────────────────────────────────────────────
+// REGISTRO DE ESCUCHA
 
 // Suma segundos escuchados al total del usuario, al día de hoy,
 // y a los contadores de noche/fin de semana según la hora del
-// servidor en el momento de la llamada. Es una aproximación
-// (no reparte el tramo si cruza medianoche o el límite del finde),
-// suficiente para fines de logros/estadísticas.
+// servidor en el momento de la llamada.
 export async function addListeningSeconds(userId, seconds) {
   if (!userId || !seconds || seconds <= 0) return;
   const connection = await getConnection();
@@ -53,9 +49,7 @@ export async function addListeningSeconds(userId, seconds) {
   }
 }
 
-// Marca el inicio de reproducción de una canción (se llama sólo
-// cuando cambia de canción o empieza a reproducir, igual que el
-// contador global de /heartbeat).
+// Marca el inicio de reproducción de una canción
 export async function recordSongPlay(userId, song) {
   if (!userId || !song?.id) return;
   const connection = await getConnection();
@@ -102,9 +96,7 @@ export async function recordPlaylistPlay(userId, playlist) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
 // LECTURA DE ESTADÍSTICAS
-// ─────────────────────────────────────────────────────────────
 
 export async function getUserListeningStats(userId) {
   const connection = await getConnection();
@@ -189,9 +181,7 @@ export async function getMostPlayedPlaylist(userId) {
   }
 }
 
-// Racha de días consecutivos escuchando música (incluye hoy si ya
-// hay algo registrado, o cuenta desde ayer si hoy aún no se ha
-// escuchado nada).
+// Racha de días consecutivos escuchando música 
 export async function getCurrentStreak(userId) {
   const connection = await getConnection();
   try {
@@ -209,7 +199,6 @@ export async function getCurrentStreak(userId) {
     let cursor = new Date();
     cursor.setHours(0, 0, 0, 0);
     // Si hoy no hay escucha todavía, la racha se cuenta desde ayer
-    // (no se rompe sólo porque aún no ha pasado el día).
     if (!daySet.has(cursor.toISOString().slice(0, 10))) {
       cursor.setDate(cursor.getDate() - 1);
     }

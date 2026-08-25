@@ -28,7 +28,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// ── Protección anti-spam (ver lib/rateLimit.js) ──────────────
+// ── Protección anti-spam  ──────────────
 // 1) Límite global por IP como backstop para todo el servidor.
 // 2) Límites específicos por plataforma/ruta, más generosos en
 //    heartbeat/latencia (se llaman muy seguido) y más estrictos

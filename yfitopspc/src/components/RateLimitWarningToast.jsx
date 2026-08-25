@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from '../store/MusicStore';
 
 const AUTO_DISMISS_MS = 7000;
@@ -8,7 +9,10 @@ const AUTO_DISMISS_MS = 7000;
 // bloquearlo de verdad (ver lib/rateLimit.js -> warnAt). No corta nada, es
 // solo un toast informativo para que la persona baje el ritmo.
 export default function RateLimitWarningToast() {
-  const { rateLimitWarning, dismissRateLimitWarning } = useMusicStore();
+  const { rateLimitWarning, dismissRateLimitWarning } = useMusicStore(
+    state => ({ rateLimitWarning: state.rateLimitWarning, dismissRateLimitWarning: state.dismissRateLimitWarning }),
+    shallow
+  );
 
   useEffect(() => {
     if (!rateLimitWarning) return;

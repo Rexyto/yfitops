@@ -17,11 +17,10 @@ import jwt from 'jsonwebtoken';
 // propio límite mucho más generoso que el resto.
 // ─────────────────────────────────────────────────────────────
 
-const buckets = new Map();      // key -> { count, resetAt }
-const violations = new Map();   // key -> { count, windowStart }
-const banHistory = new Map();   // key -> número de baneos previos
-const bans = new Map();         // key -> timestamp fin del baneo
-
+const buckets = new Map();      
+const violations = new Map();   
+const banHistory = new Map();  
+const bans = new Map();        
 const VIOLATION_WINDOW_MS = 10 * 60 * 1000; // 10 minutos
 const VIOLATION_THRESHOLD = 6;              // 6 bloqueos en la ventana -> ban
 const BASE_BAN_MS = 30 * 60 * 1000;         // 30 minutos

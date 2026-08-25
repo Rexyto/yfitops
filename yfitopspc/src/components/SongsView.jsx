@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from '../store/MusicStore';
 import useSettingsStore from '../store/SettingsStore';
 import { useT } from '../i18n';
@@ -11,10 +12,24 @@ const fmt = (s) => {
 };
 
 export default function SongsView() {
+  // Selector superficial: esta vista pinta la lista completa de canciones
+  // (con sus portadas) en cada render. Sin selector, useMusicStore()
+  // suscribe al store entero, así que la lista entera se volvía a pintar
+  // 4 veces por segundo mientras sonaba música (por "position", que ni
+  // siquiera se usa aquí) — con librerías grandes esto era el mayor
+  // consumidor de CPU de la app.
   const {
     songs, fetchSongs, fetchListeners, playSong, toggleFavorite, favorites,
     currentSong, activeListeners, updateSong, uploadCover, addToQueue,
-  } = useMusicStore();
+  } = useMusicStore(
+    state => ({
+      songs: state.songs, fetchSongs: state.fetchSongs, fetchListeners: state.fetchListeners,
+      playSong: state.playSong, toggleFavorite: state.toggleFavorite, favorites: state.favorites,
+      currentSong: state.currentSong, activeListeners: state.activeListeners,
+      updateSong: state.updateSong, uploadCover: state.uploadCover, addToQueue: state.addToQueue,
+    }),
+    shallow
+  );
   const { downloadedSongIds } = useSettingsStore();
   const t = useT();
   const [search, setSearch] = useState('');

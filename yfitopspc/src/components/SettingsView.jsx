@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from '../store/MusicStore';
 import useSettingsStore, { THEMES } from '../store/SettingsStore';
 import { useT } from '../i18n';
@@ -91,7 +92,10 @@ function DownloadableRow({ playlist, type, allSongs, isOnline }) {
 }
 
 export default function SettingsView({ appVersion }) {
-  const { playlists, folderPlaylists, songs } = useMusicStore();
+  const { playlists, folderPlaylists, songs } = useMusicStore(
+    state => ({ playlists: state.playlists, folderPlaylists: state.folderPlaylists, songs: state.songs }),
+    shallow
+  );
   const {
     theme, setTheme, language, setLanguage,
     isOnline, cacheBytes, cacheSizeLabel, clearCache, offlinePlaylists,

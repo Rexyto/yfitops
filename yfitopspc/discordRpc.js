@@ -7,9 +7,15 @@ const path = require('path');
 
 const logPath = path.join(app.getPath('userData'), 'discord-rpc.log');
 
+// Escribir a disco en cada cambio de canción/estado es innecesario en
+// producción (I/O constante + el archivo crecía para siempre sin límite).
+// En la build normal solo se registra en consola; el log a fichero queda
+// para cuando se ejecuta en modo desarrollo.
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
-  try { fs.appendFileSync(logPath, line); } catch {}
+  if (!app.isPackaged) {
+    try { fs.appendFileSync(logPath, line); } catch {}
+  }
   console.log(msg);
 }
 

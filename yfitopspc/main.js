@@ -7,6 +7,17 @@ const autostart = require('./autostart');
 
 const isDev = !app.isPackaged;
 
+// ── Instancia única ──────────────────────────────────────────
+// Sin esto, cada vez que algo lanza la app (doble clic, inicio
+// automático, un acceso directo viejo...) se abre una ventana nueva
+// en vez de reutilizar la que ya está abierta. Es la causa de que
+// aparezcan varias ventanas duplicadas al encender el PC.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+
 const tokenPath = path.join(app.getPath('userData'), 'session.json');
 
 // En Windows, sin esto la app puede identificarse como "Electron" en
@@ -54,6 +65,9 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Reduce CPU cuando la ventana está minimizada/oculta (timers y
+      // renderizado se limitan automáticamente).
+      backgroundThrottling: true,
     },
     icon: iconPath,
   });
@@ -68,6 +82,18 @@ function createWindow() {
     win.webContents.openDevTools({ mode: 'detach' });
   }
 }
+
+// Si se intenta abrir una segunda instancia (doble clic de nuevo, acceso
+// directo de inicio automático, etc.), en vez de abrir otra ventana
+// simplemente se enfoca la que ya existe.
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  }
+});
 
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
@@ -138,3 +164,5 @@ ipcMain.handle('clear-song-cache', () => localData.clearSongCache());
 // ── IPC: inicio automático con el sistema ───────────────────────
 ipcMain.handle('get-launch-on-startup', () => autostart.getLaunchOnStartup());
 ipcMain.handle('set-launch-on-startup', (_, enabled) => autostart.setLaunchOnStartup(enabled));
+
+} // fin del bloque de instancia única

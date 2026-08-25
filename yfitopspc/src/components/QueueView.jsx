@@ -1,4 +1,5 @@
 import React from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from '../store/MusicStore';
 import { SERVER_URL } from '../api';
 import { useT } from '../i18n';
@@ -10,7 +11,13 @@ const fmt = (s) => {
 };
 
 export default function QueueView({ onClose }) {
-  const { queue, removeFromQueue, moveQueueItem, clearQueue, playFromQueue, currentSong } = useMusicStore();
+  const { queue, removeFromQueue, moveQueueItem, clearQueue, playFromQueue, currentSong } = useMusicStore(
+    state => ({
+      queue: state.queue, removeFromQueue: state.removeFromQueue, moveQueueItem: state.moveQueueItem,
+      clearQueue: state.clearQueue, playFromQueue: state.playFromQueue, currentSong: state.currentSong,
+    }),
+    shallow
+  );
   const t = useT();
 
   return (

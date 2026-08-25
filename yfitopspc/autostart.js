@@ -49,18 +49,21 @@ function applyLinuxAutostart(enabled) {
 function applyAutostart(enabled) {
   // En desarrollo, process.execPath apunta al binario de Electron
   // (node_modules/electron/dist/electron.exe), NO a la app empaquetada.
-  // Si se registrara ese binario como inicio automático, Windows/Linux
-  // mostrarían "Electron" en el arranque en vez de "YFitops". Por eso
-  // el inicio automático real solo se aplica en la build empaquetada;
-  // en desarrollo el ajuste se guarda pero no se registra en el SO.
+  // Registrar ESE binario como inicio automático es lo que provocaba la
+  // ventana "Electron" en blanco al encender el PC: Windows lanzaba
+  // electron.exe suelto (sin el argumento de la app) desde el inicio
+  // automático. Por eso el registro real en el SO solo se hace en la
+  // build empaquetada (instalada con el instalador); en desarrollo el
+  // ajuste se guarda pero nunca se toca el SO.
   if (!app.isPackaged) return;
 
   if (process.platform === 'linux') {
     applyLinuxAutostart(enabled);
   } else {
     try {
-      const args = app.isPackaged ? [] : [app.getAppPath()];
-      app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath, args });
+      // Empaquetada: process.execPath ES el .exe instalado de YFitops,
+      // no hace falta pasar argumentos.
+      app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath, args: [] });
     } catch {}
   }
 }

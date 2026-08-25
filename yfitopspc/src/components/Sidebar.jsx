@@ -1,4 +1,5 @@
 import React from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from '../store/MusicStore';
 import useSettingsStore from '../store/SettingsStore';
 import { useT } from '../i18n';
@@ -13,7 +14,12 @@ const TAB_KEYS = [
 ];
 
 export default function Sidebar({ tab, setTab }) {
-  const { username, logout, activeListeners } = useMusicStore();
+  // Selector superficial: la barra lateral no usa la posición de la
+  // canción, así que no debe re-renderizarse en cada tick del audio.
+  const { username, logout, activeListeners } = useMusicStore(
+    state => ({ username: state.username, logout: state.logout, activeListeners: state.activeListeners }),
+    shallow
+  );
   const { profilePicture, isOnline } = useSettingsStore();
   const t = useT();
 

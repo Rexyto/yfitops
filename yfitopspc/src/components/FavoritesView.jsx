@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { shallow } from 'zustand/shallow';
 import useMusicStore from '../store/MusicStore';
 import useSettingsStore from '../store/SettingsStore';
 import { useT } from '../i18n';
@@ -11,7 +12,14 @@ const fmt = (s) => {
 };
 
 export default function FavoritesView() {
-  const { songs, folderPlaylists, favorites, playSong, toggleFavorite, currentSong, playShuffle, addToQueue, addManyToQueue } = useMusicStore();
+  const { songs, folderPlaylists, favorites, playSong, toggleFavorite, currentSong, playShuffle, addToQueue, addManyToQueue } = useMusicStore(
+    state => ({
+      songs: state.songs, folderPlaylists: state.folderPlaylists, favorites: state.favorites,
+      playSong: state.playSong, toggleFavorite: state.toggleFavorite, currentSong: state.currentSong,
+      playShuffle: state.playShuffle, addToQueue: state.addToQueue, addManyToQueue: state.addManyToQueue,
+    }),
+    shallow
+  );
   const { downloadedSongIds } = useSettingsStore();
   const t = useT();
 
