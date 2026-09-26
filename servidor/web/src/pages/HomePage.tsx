@@ -63,7 +63,7 @@ export default function HomePage({ user }: HomePageProps) {
         </div>
       </div>
 
-      {!loading && status && (
+      {isAdmin && !loading && status && (
         <div className="stat-grid">
           <div className="stat-card">
             <div className="stat-label">Canciones</div>

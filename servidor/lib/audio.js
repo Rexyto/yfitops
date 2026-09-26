@@ -104,8 +104,9 @@ export async function scanPlaylistFolder(folderName, existingPl) {
   const files = await fs.readdir(folderPath);
   let coverUrl = null;
   for (const ext of IMAGE_EXTS) {
-    if (files.includes(folderName + ext)) {
-      coverUrl = `/playlist/${encodeURIComponent(folderName)}/${encodeURIComponent(folderName + ext)}`;
+    const coverFilename = files.includes(`cover${ext}`) ? `cover${ext}` : files.includes(folderName + ext) ? folderName + ext : null;
+    if (coverFilename) {
+      coverUrl = `/playlist/${encodeURIComponent(folderName)}/${encodeURIComponent(coverFilename)}`;
       break;
     }
   }

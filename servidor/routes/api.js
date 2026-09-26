@@ -375,6 +375,7 @@ export default function apiRoutes(app) {
   app.get('/api/ping', authMiddleware, (req, res) => res.json({ pong: Date.now() }));
 
   app.get('/api/stats', webAuthMiddleware, async (req, res) => {
+    if (req.webUser.role !== 'superadmin') return res.status(403).json({ error: 'Sin permisos' });
     const stats = await readStats();
     const days = [];
     for (let i = 6; i >= 0; i--) {

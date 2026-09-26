@@ -30,7 +30,7 @@ export default function LoginPage({ onLogin }: any) {
       const me = await fetch('/web/me', { credentials: 'include' }).then(r => r.json());
 
       onLogin(me);
-      navigate('/home');
+      navigate(me.role === 'superadmin' ? '/panel-admin' : '/home');
     } catch {
       setError('Error de conexión con el servidor');
       setLoading(false);

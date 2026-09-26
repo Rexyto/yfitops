@@ -16,6 +16,7 @@ import VersionPage from './pages/VersionPage';
 import ApiKeysPage from './pages/ApiKeysPage';
 import AchievementsPage from './pages/AchievementsPage';
 import CreditsPage from './pages/CreditsPage';
+import AdminPanelPage from './pages/AdminPanelPage';
 
 interface User {
   username: string;
@@ -35,6 +36,18 @@ function ProtectedRoute({
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
+  return children;
+}
+
+function AdminOnlyRoute({
+  user,
+  children
+}: {
+  user: User | null;
+  children: JSX.Element;
+}) {
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'superadmin') return <Navigate to="/home" replace />;
   return children;
 }
 
@@ -98,12 +111,14 @@ export default function App() {
           path="/login"
           element={
             user ? (
-              <Navigate to="/home" replace />
+              <Navigate to={user.role === 'superadmin' ? '/panel-admin' : '/home'} replace />
             ) : (
               <LoginPage onLogin={setUser} />
             )
           }
         />
+
+        <Route path="/panel-admin" element={<AdminPanelPage user={user} onLogin={setUser} onLogout={logout} />} />
 
         {/*  PÁGINAS PÚBLICAS */}
         <Route element={<PublicLayout />}>
@@ -123,11 +138,11 @@ export default function App() {
         >
 
           <Route path="/home" element={<HomePage user={user!} />} />
-          <Route path="/users" element={<UsersPage user={user!} />} />
+          <Route path="/users" element={<AdminOnlyRoute user={user}><UsersPage user={user!} /></AdminOnlyRoute>} />
           <Route path="/stats" element={<StatsPage user={user!} />} />
           <Route path="/version" element={<VersionPage />} />
           <Route path="/achievements" element={<AchievementsPage user={user!} />} />
-          <Route path="/api-keys" element={<ApiKeysPage user={user!} />} />
+          <Route path="/api-keys" element={<AdminOnlyRoute user={user}><ApiKeysPage user={user!} /></AdminOnlyRoute>} />
           <Route path="/credits" element={<CreditsPage user={user!} />} />
 
         </Route>

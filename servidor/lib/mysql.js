@@ -57,6 +57,12 @@ export async function initializeDatabase() {
     `);
     logMySQL('[MYSQL] Tabla bot_api_keys verificada');
 
+    try {
+      await connection.execute('ALTER TABLE playlists ADD COLUMN cover_url VARCHAR(500) NULL');
+    } catch (error) {
+      if (!/duplicate column/i.test(error.message)) throw error;
+    }
+
     await createAchievementTables(connection);
     await seedAchievements(connection);
 

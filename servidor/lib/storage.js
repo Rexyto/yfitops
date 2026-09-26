@@ -64,31 +64,49 @@ export async function readUsers() {
 }
 
 export async function writeUsers(users) {
-  const connection = await getConnection();
+  const pool = await getConnection();
+  const connection = await pool.getConnection();
   try {
-    // Limpiar tabla
-    await connection.execute('DELETE FROM users');
+    await connection.beginTransaction();
 
-    // Insertar usuarios uno por uno
-    if (users.length > 0) {
-      for (const user of users) {
-        await connection.execute(
-          'INSERT INTO users (id, username, password, favorites, songs) VALUES (?, ?, ?, ?, ?)',
-          [
-            user.id,
-            user.username,
-            user.password,
-            JSON.stringify(user.favorites || []),
-            JSON.stringify(user.songs || [])
-          ]
-        );
-      }
+    for (const user of users) {
+      await connection.execute(
+        `INSERT INTO users (id, username, password, favorites, songs)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           username = VALUES(username),
+           password = VALUES(password),
+           favorites = VALUES(favorites),
+           songs = VALUES(songs)`,
+        [
+          user.id,
+          user.username,
+          user.password,
+          JSON.stringify(user.favorites || []),
+          JSON.stringify(user.songs || [])
+        ]
+      );
     }
+
+    if (users.length > 0) {
+      const ids = users.map(user => user.id);
+      await connection.query(
+        `DELETE FROM users WHERE id NOT IN (${ids.map(() => '?').join(', ')})`,
+        ids
+      );
+    } else {
+      await connection.execute('DELETE FROM users');
+    }
+
+    await connection.commit();
 
     console.log(`[STORAGE] ${users.length} usuarios guardados`);
   } catch (error) {
+    await connection.rollback().catch(() => {});
     console.error('[STORAGE] Error guardando usuarios:', error.message);
     throw error;
+  } finally {
+    connection.release();
   }
 }
 
@@ -116,6 +134,7 @@ export async function readData() {
         name: playlist.name,
         songs: parseJsonField(playlist.songs, []),
         coverColor: playlist.cover_color,
+        coverUrl: playlist.cover_url,
         userId: playlist.user_id,
         createdAt: playlist.created_at
       }))
@@ -157,12 +176,13 @@ export async function writeData(data) {
     if (data.playlists && data.playlists.length > 0) {
       for (const playlist of data.playlists) {
         await connection.execute(
-          'INSERT INTO playlists (id, name, songs, cover_color, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO playlists (id, name, songs, cover_color, cover_url, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [
             playlist.id,
             playlist.name || '',
             JSON.stringify(playlist.songs || []),
             playlist.coverColor || '#1DB954',
+            playlist.coverUrl || null,
             playlist.userId || null,
             formatDateForMySQL(playlist.createdAt || new Date())
           ]

@@ -27,3 +27,14 @@ const imageStorage = multer.diskStorage({
 });
 
 export const uploadImage = multer({ storage: imageStorage });
+
+export const uploadMemoryImage = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    ['.png', '.jpg', '.jpeg', '.webp'].includes(ext)
+      ? cb(null, true)
+      : cb(new Error('Solo imágenes'));
+  },
+});

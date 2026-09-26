@@ -222,7 +222,7 @@ function DailyChart({ data }: { data: Array<{ date: string; seconds: number }> }
 }
 
 /* ─── main component ──────────────────────── */
-export default function StatsPage({ user }: StatsPageProps) {
+function GlobalStatsPage({ user }: StatsPageProps) {
   const [stats, setStats] = useState<ServerStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -462,4 +462,44 @@ export default function StatsPage({ user }: StatsPageProps) {
       )}
     </div>
   );
+}
+
+function PersonalStatsPage() {
+  const [stats, setStats] = useState<{
+    totalHours: number;
+    totalSongsPlayed: number;
+    currentStreak: number;
+    dailyListening: Array<{ date: string; seconds: number }>;
+    mostPlayedSong: { title: string; artist: string; playCount: number } | null;
+    mostPlayedPlaylist: { name: string; playCount: number } | null;
+  } | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch('/web/stats/me', { credentials: 'include' })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Error')))
+      .then(setStats)
+      .catch(() => setError('No se pudieron cargar tus estadísticas'));
+  }, []);
+
+  if (error) return <div className="page"><div className="alert alert-error">{error}</div></div>;
+  if (!stats) return <div className="loading"><div className="spinner" />Cargando tus estadísticas...</div>;
+
+  return <div className="page" style={{ maxWidth: 1000 }}>
+    <div className="page-header"><div className="page-title">Mis estadísticas</div><div className="page-subtitle">Tu actividad musical en YFitops</div></div>
+    <div className="stat-grid">
+      <div className="stat-card"><div className="stat-label">Horas escuchadas</div><div className="stat-value">{stats.totalHours}</div></div>
+      <div className="stat-card"><div className="stat-label">Canciones reproducidas</div><div className="stat-value">{stats.totalSongsPlayed}</div></div>
+      <div className="stat-card"><div className="stat-label">Racha actual</div><div className="stat-value">{stats.currentStreak}<span className="stat-unit"> días</span></div></div>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+      <div className="card"><div className="card-title">Canción más escuchada</div>{stats.mostPlayedSong ? <><strong>{stats.mostPlayedSong.title}</strong><p className="page-subtitle">{stats.mostPlayedSong.artist} · {stats.mostPlayedSong.playCount} reproducciones</p></> : <p className="page-subtitle">Sin datos todavía</p>}</div>
+      <div className="card"><div className="card-title">Playlist más escuchada</div>{stats.mostPlayedPlaylist ? <><strong>{stats.mostPlayedPlaylist.name}</strong><p className="page-subtitle">{stats.mostPlayedPlaylist.playCount} reproducciones</p></> : <p className="page-subtitle">Sin datos todavía</p>}</div>
+    </div>
+    <div className="card" style={{ marginTop: '1rem' }}><div className="card-title">Últimos 30 días</div><DailyChart data={stats.dailyListening} /></div>
+  </div>;
+}
+
+export default function StatsPage({ user }: StatsPageProps) {
+  return user.role === 'superadmin' ? <GlobalStatsPage user={user} /> : <PersonalStatsPage />;
 }
