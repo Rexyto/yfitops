@@ -49,6 +49,22 @@ if [[ ! -d "$APPDIR_PATH" ]]; then
   exit 1
 fi
 
+if [[ ! -x "$APPDIR_PATH/yfitops" ]]; then
+  printf 'Error: expected the Yfitops executable in the AppDir: %s/yfitops\n' "$APPDIR_PATH" >&2
+  exit 1
+fi
+
+cp "$PROJECT_DIR/assets/icon.png" "$APPDIR_PATH/yfitops.png"
+cat > "$APPDIR_PATH/yfitops.desktop" <<'DESKTOP'
+[Desktop Entry]
+Name=YFitops
+Exec=yfitops %U
+Terminal=false
+Type=Application
+Icon=yfitops
+Categories=AudioVideo;Player;Audio;
+DESKTOP
+
 "$APPIMAGETOOL" --runtime-file "$RUNTIME_PATH" -u "$UPDATE_INFO" "$APPDIR_PATH" "$APPIMAGE_PATH"
 
 if [[ ! -s "$APPIMAGE_PATH" || ! -s "${APPIMAGE_PATH}.zsync" ]]; then
