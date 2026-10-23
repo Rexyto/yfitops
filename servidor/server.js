@@ -17,7 +17,7 @@ import { attachRoutes } from './routes/index.js';
 import { scanSongsOnStartup } from './lib/startup.js';
 import { syncPlaylistDir, watchCanciones, watchPlaylistDir } from './lib/watchers.js';
 import { initializeDatabase } from './lib/mysql.js';
-import { globalIpLimiter, loginLimiter, heartbeatLimiter, apiLimiter, pcLimiter, webLimiter, botLimiter } from './lib/rateLimit.js';
+import { globalIpLimiter, loginLimiter, webLoginLimiter, heartbeatLimiter, apiLimiter, pcLimiter, botLimiter } from './lib/rateLimit.js';
 
 const configModule = await import(new URL('./lib/config.js', import.meta.url));
 const { HOST, PORT, DIST_DIR, CANCIONES_DIR, PLAYLIST_DIR, PORTADAS_DIR, ROOT_DIR, DATA_DIR } = configModule;
@@ -29,26 +29,29 @@ app.use(express.json());
 app.use(cookieParser());
 
 // ── Protección anti-spam  ──────────────
-// 1) Límite global por IP como backstop para todo el servidor.
+// 1) Límite global por IP como backstop para todo el servidor excepto /web,
+//    cuyas peticiones sólo se limitan durante el inicio de sesión.
 // 2) Límites específicos por plataforma/ruta, más generosos en
 //    heartbeat/latencia (se llaman muy seguido) y más estrictos
 //    en login (fuerza bruta) y en bots.
-app.use(globalIpLimiter);
+app.use((req, res, next) => {
+  if (req.path === '/web' || req.path.startsWith('/web/')) return next();
+  return globalIpLimiter(req, res, next);
+});
 app.use('/api/login', loginLimiter);
 app.use('/pc/login', loginLimiter);
-app.use('/web/login', loginLimiter);
+app.use('/web/login', webLoginLimiter);
 app.use('/api/heartbeat', heartbeatLimiter);
 app.use('/api/latency', heartbeatLimiter);
 app.use('/pc/heartbeat', heartbeatLimiter);
 app.use('/pc/latency', heartbeatLimiter);
 app.use('/api', apiLimiter);
 app.use('/pc', pcLimiter);
-app.use('/web', webLimiter);
 app.use('/bot', botLimiter);
 
-app.use('/canciones', express.static(CANCIONES_DIR));
-app.use('/playlist', express.static(PLAYLIST_DIR));
-app.use('/portadas', express.static(PORTADAS_DIR));
+app.use('/canciones', express.static(CANCIONES_DIR, { maxAge: '1h' }));
+app.use('/playlist', express.static(PLAYLIST_DIR, { maxAge: '1h' }));
+app.use('/portadas', express.static(PORTADAS_DIR, { maxAge: '5m' }));
 app.use(express.static(DIST_DIR));
 
 attachRoutes(app);
@@ -78,9 +81,7 @@ await initializeDatabase();
 
 await initUsers();
 await scanSongsOnStartup();
-await syncPlaylistDir();
-watchCanciones();
-watchPlaylistDir();
+await syncPlaylistDir({ fetchMissingCovers: false });
 
 process.on('unhandledRejection', (reason) => {
   console.error('[FATAL] Unhandled Rejection:', reason);
@@ -94,6 +95,16 @@ process.on('uncaughtException', (error) => {
 const server = app.listen(PORT, HOST, () => {
   console.log(`Servidor en http://${HOST}:${PORT}`);
   console.log('Externo: https://yfitops.duckdns.org');
+  console.log('[STARTUP] Web disponible; buscando portadas pendientes en segundo plano');
+  watchCanciones().catch(error => {
+    console.error('[STARTUP] No se pudo activar el vigilante de canciones:', error);
+  });
+  watchPlaylistDir().catch(error => {
+    console.error('[STARTUP] No se pudo activar el vigilante de carpetas:', error);
+  });
+  syncPlaylistDir({ retryMissingCovers: true }).catch(error => {
+    console.error('[STARTUP] No se pudieron comprobar las portadas pendientes:', error);
+  });
 });
 
 server.on('error', (err) => {

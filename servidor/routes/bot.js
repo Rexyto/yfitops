@@ -34,7 +34,7 @@ export default function botRoutes(app) {
   });
 
   app.post('/bot/sync', botAuthMiddleware, async (req, res) => {
-    await syncPlaylistDir();
+    await syncPlaylistDir({ retryMissingCovers: true });
     const data = await readDataPl();
     res.json({ success: true, count: data.playlists.length });
   });

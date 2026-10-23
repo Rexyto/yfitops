@@ -15,6 +15,7 @@
 - [Arranque](#arranque)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Carpeta data/](#carpeta-data)
+- [Panel web de administración](#panel-web-de-administración)
 - [App de escritorio (Windows y Linux)](#app-de-escritorio-windows-y-linux)
 - [App de Samsung TV Tizen](#app-de-samsung-tv-tizen)
 - [App móvil (Android)](#app-móvil-android)
@@ -33,14 +34,15 @@
 
 ## Resumen
 
-- Almacena usuarios, canciones, playlists y estadísticas en **MySQL**.
-- Solo persisten en disco `data/version.json` y `data/actualizacion.json`.
-- JWT independiente por plataforma: `/api/`, `/pc/`, `/web/` y `X-Bot-Key` para `/bot/`.
+- Almacena usuarios, canciones, playlists y estadísticas en **MySQL**. El esquema de las tablas principales se prepara manualmente; el servidor solo crea tablas auxiliares.
+- `data/version.json` y `data/actualizacion.json` persisten en disco. Los archivos JSON de usuarios, canciones, playlists y estadísticas son legado y no son el almacenamiento activo de `lib/storage.js`.
+- JWT independiente por plataforma: `/api/` y `/pc/` (30 días), cookie `web_token` para `/web/` (3 días) y API key en `/bot/`.
 - Sistema de **logros** (100 de base, ampliables desde el panel web) y **estadísticas reales por usuario** (horas escuchadas, racha, canción/playlist más escuchada). Ver [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario).
-- **Rate limiting** con baneo progresivo en todas las APIs, sin penalizar el uso normal (cambios de canción rápidos, etc.). Ver [Protección anti-spam / rate limiting](#protección-anti-spam--rate-limiting).
-- Panel administrativo React en `servidor/web`.
-- Sincronización automática de los directorios `canciones/`, `playlist/` y `portadas/`.
-- Documentación completa de todos los endpoints en [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md), en la raíz del repositorio. El detalle de logros, estadísticas por usuario y rate limiting está en este mismo README, en las secciones [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario) y [Protección anti-spam / rate limiting](#protección-anti-spam--rate-limiting).
+- **Rate limiting** por ruta, con un baneo progresivo específico para el login web y avisos previos para algunas rutas de reproducción. Ver [Protección anti-spam / rate limiting](#protección-anti-spam--rate-limiting).
+- Panel web React con zona pública, área de usuario y consola exclusiva de superadministración para playlists, biblioteca, usuarios, estadísticas, claves API, logros y versiones.
+- Sincronización automática de los directorios `canciones/` y `playlist/`; `portadas/` almacena y permite reutilizar las imágenes.
+- La búsqueda de portadas pendientes en playlists de carpetas arranca **después de que la web esté disponible**. Las imágenes se guardan en `servidor/portadas/`, se reutilizan y se registran en caché.
+- Contratos, autenticación, límites y todas las rutas implementadas en [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md). Esa guía refleja lo que hacen hoy los handlers; las notas de limitaciones del esquema y de seguridad están abajo.
 
 ---
 
@@ -84,40 +86,40 @@ BOT_API_KEY=tu_clave_bot_18K2v6GlanhBaY2YVC7TMe9w50l11tYtLjHQ35
 | Variable | Descripción | Defecto |
 |---|---|---|
 | `SERVER_PORT` | Puerto de escucha del servidor | `6666` |
-| `MYSQL_HOST` | Host de MySQL | — |
+| `MYSQL_HOST` | Host de MySQL | El código tiene un valor interno; configúralo explícitamente |
 | `MYSQL_PORT` | Puerto de MySQL | `3306` |
-| `MYSQL_USER` | Usuario de MySQL | — |
-| `MYSQL_PASSWORD` | Contraseña de MySQL | — |
-| `MYSQL_DATABASE` | Base de datos MySQL | — |
-| `JWT_SECRET` | Secreto JWT para `/api/` (móvil) | — |
-| `WEB_JWT_SECRET` | Secreto JWT para `/web/` (panel) | — |
-| `PC_JWT_SECRET` | Secreto JWT para `/pc/` (Windows) | — |
-| `BOT_API_KEY` | Clave legacy para `/bot/` | — |
+| `MYSQL_USER` | Usuario de MySQL | El código tiene un valor interno; configúralo explícitamente |
+| `MYSQL_PASSWORD` | Contraseña de MySQL | El código tiene un valor interno; configúralo explícitamente |
+| `MYSQL_DATABASE` | Base de datos MySQL | `yfitops` |
+| `JWT_SECRET` | Secreto JWT para `/api/` (móvil) | Secreto de desarrollo incluido en el código; reemplázalo |
+| `WEB_JWT_SECRET` | Secreto JWT para `/web/` (panel) | Secreto de desarrollo incluido en el código; reemplázalo |
+| `PC_JWT_SECRET` | Secreto JWT para `/pc/` (PC y TV) | Secreto de desarrollo incluido en el código; reemplázalo |
+| `BOT_API_KEY` | Clave legacy para `/bot/`, aceptada además de claves de BD | Sin clave por defecto |
+| `MYSQL_DEBUG` / `DEBUG_MYSQL` | Activa logs de depuración de MySQL si su valor es `true` | Desactivado |
+
+`SERVER_URL` aparece en `env.example`, pero el backend no lo lee. El puerto sí se lee desde `SERVER_PORT`; el host escucha en `0.0.0.0` y no es configurable por variable.
 
 ---
 
 ## Tablas de MySQL
 
-El servidor **no crea todas las tablas por ti**. Se dividen en dos grupos:
+El servidor **no crea las tablas principales**. Antes del primer arranque deben existir `users`, `songs`, `playlists`, `folder_playlists` y `stats` con las columnas que usa `lib/storage.js`. Al arrancar, `initializeDatabase()` crea `bot_api_keys`, las tablas de logros/estadísticas por usuario y añade `playlists.cover_url` si falta.
 
-- **Tablas principales** (usuarios, canciones, playlists, estadísticas globales): hay que crearlas a mano antes del primer arranque, con el script de más abajo.
-- **Tablas de `bot_api_keys`, logros y estadísticas por usuario**: se crean **solas** al arrancar el servidor (`initializeDatabase()` en `lib/mysql.js`), no hay que tocar nada.
+- No se usan tablas relacionales `user_favorites`, `user_songs`, `playlist_songs` ni `folder_playlist_songs`: favoritos, canciones del usuario y canciones de playlists se guardan en columnas JSON.
+- La fila `stats.id = 1` debe existir antes de registrar estadísticas: `writeStats()` ejecuta `UPDATE` y no la inserta si falta.
 
-> Si tu `lib/storage.js` usa nombres de columna distintos a los de aquí abajo, ajusta el script en consecuencia.
-
-<details>
-<summary><strong>Ver script SQL — tablas principales (crear a mano)</strong></summary>
+> El SQL de abajo corresponde a las columnas consultadas por el servidor actual. En instalaciones existentes, compara primero el esquema; no ejecutes una migración destructiva sobre tus datos.
 
 ```sql
--- Usuarios
 CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(36) PRIMARY KEY,
   username VARCHAR(100) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
+  favorites JSON NOT NULL,
+  songs JSON NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Canciones de la biblioteca
 CREATE TABLE IF NOT EXISTS songs (
   id VARCHAR(50) PRIMARY KEY,
   title VARCHAR(500) NOT NULL,
@@ -130,89 +132,45 @@ CREATE TABLE IF NOT EXISTS songs (
   upload_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Favoritos por usuario (relación N:M)
-CREATE TABLE IF NOT EXISTS user_favorites (
-  user_id VARCHAR(36) NOT NULL,
-  song_id VARCHAR(50) NOT NULL,
-  PRIMARY KEY (user_id, song_id),
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE
-);
-
--- Canciones subidas por cada usuario ("mis canciones")
-CREATE TABLE IF NOT EXISTS user_songs (
-  user_id VARCHAR(36) NOT NULL,
-  song_id VARCHAR(50) NOT NULL,
-  PRIMARY KEY (user_id, song_id),
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE
-);
-
--- Playlists creadas manualmente por los usuarios
 CREATE TABLE IF NOT EXISTS playlists (
   id VARCHAR(64) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
+  songs JSON NOT NULL,
   cover_color VARCHAR(7) DEFAULT '#1DB954',
+  cover_url VARCHAR(700) NULL,
   user_id VARCHAR(36) NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS playlist_songs (
-  playlist_id VARCHAR(64) NOT NULL,
-  song_id VARCHAR(50) NOT NULL,
-  position INT NOT NULL DEFAULT 0,
-  PRIMARY KEY (playlist_id, song_id),
-  FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
-  FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE
-);
-
--- Playlists automáticas generadas desde carpetas de playlist/
 CREATE TABLE IF NOT EXISTS folder_playlists (
   id VARCHAR(64) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
+  folder_name VARCHAR(255) NOT NULL,
+  songs JSON NOT NULL,
   cover_url VARCHAR(700) NULL,
   total_duration FLOAT DEFAULT 0,
+  source VARCHAR(50) DEFAULT 'folder',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS folder_playlist_songs (
-  folder_playlist_id VARCHAR(64) NOT NULL,
-  song_id VARCHAR(50) NOT NULL,
-  position INT NOT NULL DEFAULT 0,
-  PRIMARY KEY (folder_playlist_id, song_id),
-  FOREIGN KEY (folder_playlist_id) REFERENCES folder_playlists(id) ON DELETE CASCADE
-);
-
--- Estadísticas globales (una sola fila, id fijo = 1)
-CREATE TABLE IF NOT EXISTS stats_summary (
-  id TINYINT PRIMARY KEY DEFAULT 1,
+CREATE TABLE IF NOT EXISTS stats (
+  id TINYINT PRIMARY KEY,
   total_listening_seconds BIGINT NOT NULL DEFAULT 0,
-  total_songs_played INT NOT NULL DEFAULT 0
+  total_songs_played INT NOT NULL DEFAULT 0,
+  latency_samples JSON NOT NULL,
+  processing_times JSON NOT NULL,
+  daily_listening JSON NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Últimas muestras de latencia de conexión
-CREATE TABLE IF NOT EXISTS stats_latency_samples (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  latency_ms INT NOT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- Tiempos de procesamiento de subidas
-CREATE TABLE IF NOT EXISTS stats_processing_times (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  processing_ms INT NOT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- Segundos escuchados por día (global, todos los usuarios sumados)
-CREATE TABLE IF NOT EXISTS stats_daily_listening (
-  day DATE PRIMARY KEY,
-  seconds INT NOT NULL DEFAULT 0
-);
+INSERT INTO stats (id, total_listening_seconds, total_songs_played, latency_samples, processing_times, daily_listening)
+VALUES (1, 0, 0, JSON_ARRAY(), JSON_ARRAY(), JSON_OBJECT())
+ON DUPLICATE KEY UPDATE id = VALUES(id);
 ```
 
-</details>
+Las canciones de playlists, favoritos y canciones subidas se guardan en columnas JSON: no crees tablas relacionales paralelas con claves foráneas hacia `songs`, porque `writeData()` reemplaza el contenido de `songs` y `playlists` al sincronizar. El motor de estadísticas usa una sola fila en `stats`; el `INSERT` final es necesario para que las actualizaciones persistan.
 
 <details>
 <summary><strong>Ver script SQL — logros y estadísticas por usuario (se crean solas, solo de referencia)</strong></summary>
@@ -310,13 +268,11 @@ CREATE TABLE IF NOT EXISTS user_playlist_plays (
 
 | Tabla | Para qué sirve | ¿Se crea sola? |
 |---|---|---|
-| `users` | Usuarios y contraseñas hasheadas | No, crear a mano |
+| `users` | Usuarios, contraseña hasheada, favoritos y canciones del usuario (arrays JSON) | No, crear a mano |
 | `songs` | Biblioteca de canciones | No, crear a mano |
-| `user_favorites` | Favoritos por usuario | No, crear a mano |
-| `user_songs` | Qué canciones subió cada usuario | No, crear a mano |
-| `playlists` / `playlist_songs` | Playlists manuales de cada usuario | No, crear a mano |
-| `folder_playlists` / `folder_playlist_songs` | Playlists automáticas desde `playlist/` | No, crear a mano |
-| `stats_summary`, `stats_latency_samples`, `stats_processing_times`, `stats_daily_listening` | Estadísticas globales del panel | No, crear a mano |
+| `playlists` | Playlists manuales, incluyendo las canciones serializadas como JSON | No, crear a mano |
+| `folder_playlists` | Playlists automáticas, incluyendo canciones serializadas como JSON | No, crear a mano |
+| `stats` | Estadísticas globales y arrays JSON de latencia/procesamiento/días | No, crear a mano; insertar `id = 1` |
 | `bot_api_keys` | Claves de acceso para `/bot/*` | **Sí** |
 | `achievements` | Catálogo de logros (editable desde el panel web) | **Sí**, y se siembra con 100 logros base |
 | `user_achievements` | Logros desbloqueados por cada usuario | **Sí** |
@@ -325,21 +281,24 @@ CREATE TABLE IF NOT EXISTS user_playlist_plays (
 | `user_song_plays` | Reproducciones por usuario y canción (canción más escuchada) | **Sí** |
 | `user_playlist_plays` | Reproducciones por usuario y playlist (playlist más escuchada) | **Sí** |
 
-No hace falta migrar nada para vincular a los usuarios ya existentes con las tablas nuevas: todas usan `user_id` con `FOREIGN KEY` a `users(id)`, la misma clave primaria que ya tienen. Las filas se crean solas (upsert) en cuanto ese usuario hace login o manda su primer heartbeat. Detalle completo en [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario).
+El almacenamiento no usa `user_favorites`, `user_songs`, `playlist_songs`, `folder_playlist_songs` ni las tablas `stats_summary`/`stats_*` descritas en documentación antigua. Las tablas auxiliares nuevas sí referencian `users(id)` y se inicializan al arrancar. `readUsers()` no mapea `created_at` a `createdAt`; por eso la métrica `account_age_days` del motor de logros no obtiene actualmente la fecha de creación desde esta capa.
+
+El servidor no crea una cuenta inicial. `/web/users` requiere que ya exista una sesión `superadmin`, así que hay que aprovisionar el primer usuario por un procedimiento administrativo fuera de esa ruta. El nombre exacto `rexy` es lo que el código usa para asignar `superadmin`; la columna `password` debe contener el resultado de `hashPassword()` de `lib/auth.js`, no texto plano.
 
 ---
 
 ## Migración a MySQL
 
-Si vienes de la versión antigua basada en JSON, ejecuta:
+El `package.json` declara estos comandos:
 
 ```bash
 npm run migrate
+npm run final-fix
 ```
 
-Migra automáticamente `data/users.json`, `data/data.json`, `data/dataplaylist.json` y `data/stats.json` a MySQL.
+En este workspace no existen `migrate-to-mysql.js` ni `final-fix.js`, que son los archivos que esos scripts intentan ejecutar. Por tanto, los comandos no realizan una migración y fallan hasta que se añadan esos archivos. No borres los JSON antiguos ni des por migrados sus datos por ejecutar dichos scripts.
 
-> Tras la migración solo se conservan en disco `data/version.json` y `data/actualizacion.json`.
+Los datos activos de usuarios/canciones/playlists/estadísticas se leen y escriben en MySQL; los JSON antiguos no se migran ni se consultan por el backend actual.
 
 ---
 
@@ -357,6 +316,22 @@ npm run web:dev
 ```
 
 El servidor queda disponible en `http://0.0.0.0:6666` o en el puerto configurado.
+Al arrancar, sincroniza canciones y carpetas sin búsquedas externas de portadas, levanta el servidor web y después consulta las portadas que falten en segundo plano.
+
+---
+
+## Panel web de administración
+
+El panel web se compila desde `servidor/web` y se sirve junto con el backend. La consola para superadministradores está en `/panel-admin`; el inicio de sesión normal está en `/login`. El servidor aplica la autorización de superadministrador también en las rutas API, no solo en la interfaz.
+
+La consola incluye:
+
+- **Resumen** con accesos rápidos a las herramientas de administración.
+- **Playlists y colecciones de carpetas**: renombrar, cambiar la portada, añadir canciones, editar título/artista/álbum, subir una portada individual y eliminar canciones.
+- **Usuarios**, **estadísticas globales**, **claves API de bots**, **logros** y **versión de la aplicación**.
+- La edición de metadatos de una canción de una colección puede volver a comprobar su portada si no tiene una asignada.
+
+Las portadas subidas desde el panel se convierten a WebP con `ffmpeg`. Para una playlist de carpeta se guardan dentro de su directorio; para una playlist manual o una canción, en `servidor/portadas/`. Las rutas de administración están documentadas en [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md).
 
 ---
 
@@ -370,35 +345,42 @@ yfitops/
 ├── README.md
 ├── yfitops-android/                         # App móvil (Android/iOS) — Expo + React Native
 │   ├── App.js                   # Componente raíz: sesión, splash, modal de novedades/actualización
-│   ├── app.json                 # Configuración de Expo (nombre, iconos, permisos, plugins)
+│   ├── index.js                 # Registra la tarea en segundo plano de Track Player y la app Expo
+│   ├── app.json                 # Configuración Expo y permisos Android de reproducción/notificaciones
 │   ├── eas.json                 # Perfiles de build de EAS (development/preview/production)
 │   ├── package.json
 │   ├── package-lock.json
 │   ├── .env                     # EXPO_PUBLIC_SERVER_URL y secretos locales (no versionar)
 │   ├── assets/                  # icon.png, splash.png, adaptive-icon.png, favicon.png
-│   ├── plugins/
-│   │   └── withMusicForegroundService.js   # Config plugin: servicio en primer plano + botón de medios en Android
+│   ├── patches/
+│   │   └── react-native-track-player+4.1.2.patch # Compatibilidad con los métodos de Track Player en Android
 │   └── src/
 │       ├── theme.js             # Los 11 temas de color (mismos que la app de PC) + contexto
+│       ├── utils/
+│       │   └── mediaUrl.js      # Normaliza rutas locales y absolutas de canciones/portadas
 │       ├── i18n/
 │       │   ├── translations.js  # Textos ES/EN de toda la interfaz (incluye logros/estadísticas)
 │       │   └── index.js         # Hook useT()
 │       ├── context/
-│       │   ├── MusicContext.js    # Estado global: sesión, biblioteca, reproductor (expo-av), notificación, heartbeat con contexto de playlist, logros y estadísticas
+│       │   ├── MusicContext.js    # Estado global; Track Player nativo en Android, expo-av en iOS, cola, seek, heartbeat, logros y estadísticas
 │       │   └── SettingsContext.js # Tema, idioma, foto de perfil, conectividad, descargas offline y caché
+│       ├── services/
+│       │   ├── MusicService.js    # Acciones remotas de notificación/pantalla bloqueada y limpieza de cola nativa
+│       │   └── MusicNotification.js # Configuración de notificaciones de reproducción
 │       ├── screens/
 │       │   ├── LoginScreen.js
 │       │   ├── MainScreen.js      # Tab bar: Inicio, Favoritos, Colecciones, Ajustes
 │       │   ├── SongsScreen.js
 │       │   ├── FavoritesScreen.js
 │       │   ├── PlaylistsScreen.js
-│       │   └── SettingsScreen.js  # Perfil, logros y estadísticas reales, apariencia, descargas offline, almacenamiento, créditos, versión
+│       │   └── SettingsScreen.js  # Perfil, logros/estadísticas, apariencia, descargas (incluye almacenamiento) y créditos
 │       └── components/
 │           ├── Icon.js            # Iconos por emoji/texto (sin dependencias nativas de iconografía)
 │           ├── MarqueeText.js
 │           ├── PlayerBar.js
-│           ├── PlayerModal.js
+│           ├── PlayerModal.js     # Reproductor expandido con barra interactiva de seek y cola manual
 │           ├── SongItem.js
+│           ├── QueueView.js
 │           ├── AchievementToast.js     # Notificación emergente al desbloquear un logro nuevo
 │           └── RateLimitWarningToast.js # Aviso amistoso cuando el servidor detecta que se están mandando peticiones muy seguido
 │
@@ -422,7 +404,9 @@ yfitops/
 │   │   ├── achievementsCatalog.js # Genera el catálogo de 100 logros base (semilla de la tabla `achievements`)
 │   │   ├── achievements.js     # Motor de logros: catálogo, métricas por usuario, evaluación y CRUD admin
 │   │   ├── userStats.js        # Estadísticas de escucha por usuario (horas, racha, más escuchado...)
-│   │   └── rateLimit.js        # Limitadores anti-spam y baneo progresivo (ver Protección anti-spam)
+│   │   ├── rateLimit.js        # Limitadores anti-spam (ver Protección anti-spam)
+│   │   ├── covers.js           # Limpieza de metadatos, búsqueda externa, caché y guardado de portadas
+│   │   └── coverFiles.js       # Resolución segura de portadas y borrado de archivos sin referencias
 │   ├── routes/
 │   │   ├── api.js              # API móvil  → /api/*  (incluye logros y estadísticas personales)
 │   │   ├── pc.js                # API PC     → /pc/*  (incluye logros y estadísticas personales)
@@ -432,12 +416,18 @@ yfitops/
 │   │   └── index.js             # Registro de rutas
 │   ├── data/
 │   │   ├── version.json         # Versión de apps
-│   │   └── actualizacion.json   # Changelog / notas
+│   │   ├── actualizacion.json   # Changelog / notas
+│   │   └── artwork-cache.json   # Caché runtime de búsquedas de portadas (positivas y negativas)
 │   ├── canciones/                # Archivos de audio subidos
 │   ├── playlist/                 # Playlists por carpeta
-│   ├── portadas/                 # Carátulas .webp/.jpg subidas o recogidas manualmente para las canciones
+│   ├── portadas/                 # Portadas subidas o encontradas automáticamente
 │   ├── node_modules/              # Dependencias (no versionar)
-│   └── web/                       # Panel administrativo React/Vite (incluye gestión de logros en /achievements)
+│   └── web/                       # Web React/Vite: páginas públicas, área de usuario y consola /panel-admin
+│       └── src/
+│           ├── pages/
+│           │   └── AdminPanelPage.tsx # Gestión de playlists, canciones y herramientas de administración
+│           └── styles/
+│               └── StatsPage.css  # Estilos de estadísticas del panel
 │
 ├── yfitopspc/                   # App de escritorio Electron — genera tanto el instalador de Windows como el binario de Linux
 │   ├── main.js                  # Proceso principal de Electron
@@ -445,6 +435,7 @@ yfitops/
 │   ├── discordRpc.js            # Discord Rich Presence ("reproduciendo ahora")
 │   ├── localData.js             # Datos solo-locales: foto de perfil, canciones/playlists descargadas, caché
 │   ├── autostart.js             # Inicio automático con el sistema (Windows/macOS nativo, Linux vía .desktop)
+│   ├── scripts/build-appimage.sh # AppImage Linux con runtime estático, actualizaciones y archivo .zsync
 │   ├── webpack.config.js        # Bundler del renderer (React)
 │   ├── package.json
 │   ├── package-lock.json
@@ -529,16 +520,17 @@ Esta carpeta se crea sola al arrancar el servidor (`fs.mkdir(DATA_DIR, { recursi
 
 | Archivo | ¿Quién lo crea? | ¿Qué debe contener? |
 |---|---|---|
-| `version.json` | **Tú, a mano** (el servidor no rellena valores reales por ti) | JSON con la versión actual de cada plataforma y el link de descarga. Ejemplo: `{"version": "2.0.0", "apkUrl": "", "pc": {"version": "1.0.0", "exeUrl": ""}}`. Rellena `apkUrl` y `exeUrl` con las URLs reales del APK/EXE cuando los tengas subidos. |
-| `actualizacion.json` | **Tú, a mano** | Notas de la versión (changelog) que se muestran al actualizar la app. Debe tener `version`, `notes` (texto con saltos de línea `\n` para cada punto) y opcionalmente `pc.version` / `pc.notes` para el changelog de la app de Windows. |
-| `users.json` | **Solo si migras** desde la versión antigua basada en JSON | Array de usuarios: `username`, `password` (hash), `id`, `favorites` (array de IDs) y `songs` (array de IDs). Tras ejecutar `npm run migrate` este archivo ya no hace falta, los usuarios pasan a estar en MySQL. Si arrancas de cero (sin migración), **no hace falta crearlo**: los usuarios se gestionan directamente en MySQL desde el primer momento. |
-| `data.json` | **Solo si migras** | Objeto con `songs` (array de canciones con `id`, `title`, `artist`, `album`, `duration`, `filename`, `url`, `coverUrl`, `uploadDate`), `playlists` (array, puede ir vacío `[]`) y `favorites`. Igual que `users.json`, solo es necesario para `npm run migrate`; en una instalación nueva no hay que crearlo. |
-| `dataplaylist.json` | **Solo si migras** | Datos de las playlists automáticas generadas a partir de las carpetas dentro de `playlist/`. Tampoco hace falta crearlo a mano en una instalación nueva: se reconstruye solo al sincronizar `playlist/` (`syncPlaylistDir`). |
-| `stats.json` | **Solo si migras** | Estadísticas antiguas: `totalListeningSeconds`, `totalSongsPlayed`, `latencySamples` (array), `processingTimes` (array) y `dailyListening` (objeto `fecha: segundos`). En una instalación nueva no es necesario, las estadísticas se guardan en MySQL desde el arranque. |
+| `version.json` | Se crea con valores por defecto al primer `GET /api/version` o `/web/version` | Contiene `version`, `apkUrl` y campos adicionales que mantenga el operador. `GET /pc/version` devuelve el subobjeto `pc` o un valor por defecto. Completa las URLs y versiones reales manualmente. |
+| `actualizacion.json` | Se crea con valores por defecto al primer `GET /api/changelog` o `/pc/changelog` | Contiene `version`, `notes` y opcionalmente `pc: { version, notes }`. El panel no ofrece un endpoint para editar el changelog; edítalo en disco. |
+| `artwork-cache.json` | Se genera al realizar búsquedas automáticas de portadas | Caché positiva y negativa de búsquedas para las playlists de carpetas, persistida entre reinicios. |
+| `users.json` | No lo usa el backend activo | Archivo legado. Los usuarios, favoritos y canciones asociadas se leen de MySQL. Los scripts de migración declarados no están presentes en este workspace. |
+| `data.json` | No lo usa el backend activo | Archivo legado. Biblioteca y playlists manuales están en MySQL; archivos de audio siguen en `canciones/`. |
+| `dataplaylist.json` | No lo usa el backend activo | Archivo legado. Las playlists de carpeta se reconstruyen desde `playlist/` y se guardan en MySQL. |
+| `stats.json` | No lo usa el backend activo | Archivo legado. Las estadísticas globales y por usuario se guardan en MySQL. |
 
 **Resumen rápido:**
-- Instalación **nueva** (sin datos previos): solo necesitas crear `version.json` y `actualizacion.json` a mano antes de arrancar. Todo lo demás (usuarios, canciones, playlists, estadísticas, logros) vive en MySQL y se gestiona solo.
-- Instalación que **viene de una versión vieja en JSON**: coloca los 4 archivos legacy (`users.json`, `data.json`, `dataplaylist.json`, `stats.json`) en `data/` junto a `version.json` y `actualizacion.json`, y luego ejecuta `npm run migrate`. Una vez migrados, puedes borrar los 4 archivos legacy; ya no se vuelven a leer. Las tablas de logros/estadísticas por usuario no forman parte de esta migración: se rellenan solas a partir de ese momento, según los usuarios vayan usando la app (ver [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario)).
+- Instalación nueva: prepara el esquema MySQL de [Tablas de MySQL](#tablas-de-mysql), crea al menos un usuario y configura `version.json`/`actualizacion.json` con los datos de publicación. Los dos JSON de versión/changelog se generan con valores por defecto si faltan.
+- Instalación antigua basada en JSON: no ejecutes `npm run migrate` esperando una migración; el script objetivo falta. Conserva una copia de los JSON y planifica una migración explícita antes de cambiar a esta versión.
 
 ---
 
@@ -635,6 +627,14 @@ npx electron-builder --win        # genera el instalador en release/
    ├── YFitops-2.0.0.AppImage
    └── yfitops_2.0.0_amd64.deb
    ```
+
+Para publicar un AppImage con un nombre limpio y actualizaciones incrementales, usa en Linux:
+```bash
+npm run dist:linux:appimage
+```
+Este comando requiere un `appimagetool` reciente disponible en el `PATH` (o indicado mediante `APPIMAGETOOL`), además de `curl` y `zsyncmake`. Descarga el runtime x86_64 estático oficial de [AppImage/type2-runtime](https://github.com/AppImage/type2-runtime), que evita depender de libfuse2 en el equipo de destino. Genera `YFitops-<versión>-x86_64.AppImage` y su archivo `.zsync`, con la información de actualización de GitHub integrada. Sube **ambos archivos** a la misma release de GitHub; el actualizador busca el `.zsync` de la release más reciente. Para proporcionar un runtime local en vez de descargarlo durante la compilación, define `APPIMAGE_RUNTIME` con la ruta al archivo.
+
+La referencia a glibc 2.18 del informe no es una biblioteca que deba copiarse dentro del AppImage: glibc es parte del sistema anfitrión y empaquetarla puede romper la compatibilidad. Mantener esa versión mínima es preferible a depender de una glibc más nueva; compila en una distribución Linux antigua compatible para no elevar el requisito mínimo.
 
 7. **(Opcional) Compilar también el `.exe` desde la misma máquina Linux** con Wine, si quieres tener ambos binarios en un solo paso:
    ```bash
@@ -810,19 +810,25 @@ La app queda instalada y lista para abrirse desde el menú **Apps** de la TV. Pa
 
 La app móvil (`yfitops-android/`) es una aplicación **Expo + React Native** que vive junto a `servidor/` y `yfitopspc/`, dentro de la misma ruta del proyecto. Se conecta al backend a través de las rutas `/api/*` documentadas en [APIs](#apis) y en [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md).
 
+La versión Android preparada para esta actualización es **v1.4.0**.
+
 Comparte la misma filosofía que la app de PC: mismos 11 temas de color, mismo sistema de idiomas (ES/EN), descargas offline y foto de perfil solo-local. La única diferencia real de plataforma es que no tiene sentido un "inicio con el sistema" en un móvil, así que esa función no existe aquí.
 
-> Desde la v1.3.0 incluye logros y estadísticas reales (ver [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario)), en una sección nueva dentro de Ajustes ("Logros"). No es una pantalla separada como en PC — se integra como una sección más de `SettingsScreen.js`, siguiendo el mismo patrón de secciones (Perfil, Apariencia, Descargas...) que ya tenía esa pantalla.
+Incluye logros y estadísticas reales (ver [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario)), en secciones diferenciadas dentro de Ajustes.
+
+En Android, la reproducción usa **React Native Track Player** y su servicio nativo, registrado en `index.js` y atendido por `src/services/MusicService.js`. La sesión multimedia nativa publica los metadatos y la portada de la canción junto con los controles de anterior, reproducir/pausar y siguiente; Android determina el aspecto de la notificación, que puede variar según la versión y el fabricante. Esto permite mantener los controles de medios en la notificación y la pantalla bloqueada, y continuar la cola cuando la pantalla se apaga. La cola visible contiene las canciones añadidas manualmente; la playlist completa no se copia como si fuera la cola. El reproductor expandido permite arrastrar la barra para buscar otra posición y sincroniza el seek con el reproductor nativo. iOS conserva la implementación basada en `expo-av`.
+
+Ajustes reúne el perfil, logros y estadísticas en apartados diferenciados, apariencia, descargas offline (incluido el uso de almacenamiento), créditos y la información de la aplicación. Las descargas y su espacio ocupado se gestionan desde la sección de canciones offline.
 
 ### Requisitos
 
 - Node.js 18+
 - Una cuenta de [Expo](https://expo.dev) (gratuita) para compilar con EAS Build
-- Para probar en desarrollo: la app **Expo Go** en tu móvil, o un emulador/dispositivo Android
+- Para Android, un emulador/dispositivo y un development build: Expo Go no incluye el módulo nativo de Track Player.
 
 ### Configuración
 
-Crea `app/.env` con la URL de tu servidor:
+Crea `yfitops-android/.env` con la URL de tu servidor:
 
 ```env
 EXPO_PUBLIC_SERVER_URL=https://tu-servidor.com
@@ -833,10 +839,10 @@ EXPO_PUBLIC_SERVER_URL=https://tu-servidor.com
 ```bash
 cd yfitops-android
 npm install
-npx expo start
+npx expo run:android
 ```
 
-Escanea el QR con la app **Expo Go** (Android) o pulsa `a` en la terminal para abrir en un emulador Android.
+`expo run:android` crea/usa el proyecto nativo y lo instala en el dispositivo o emulador conectado. Para desarrollo con Metro, crea primero un development build (local con `npx expo run:android` o mediante el perfil `development` de EAS) e inicia después `npx expo start --dev-client`; abre ese servidor desde el development client, no desde Expo Go.
 
 ### Compilar el `.apk`
 
@@ -878,7 +884,7 @@ eas build --platform android --profile production
 
 ### Publicar la actualización
 
-Igual que con el `.exe`/`AppImage` de PC: sube el `.apk` generado a donde lo sirvas (por ejemplo, `GET /app.apk` del panel web, ver [API web](#api-web-web) en `API_DOCUMENTATION.md`), y actualiza a mano:
+Subir el `.apk` a `servidor/web/public/downloads/` solo lo publica como archivo estático. La ruta autenticada `GET /app.apk` busca el archivo en `servidor/app.apk`, que está fuera de esa carpeta. La app móvil consulta `apkUrl` de `data/version.json`; configura una URL accesible para los clientes y actualiza a mano:
 
 - `data/version.json` → campo `apkUrl` (y `version`, para que la app detecte que hay una nueva).
 - `data/actualizacion.json` → notas de la versión que se muestran en el modal "Novedades" al abrir la app.
@@ -888,23 +894,27 @@ Igual que con el `.exe`/`AppImage` de PC: sube el `.apk` generado a donde lo sir
 | Archivo/carpeta | Función |
 |---|---|
 | `App.js` | Componente raíz: splash screen, verificación de sesión guardada, comprobación de versión/changelog contra `/api/version` y `/api/changelog`, banner de sin conexión. |
-| `app.json` | Configuración de Expo: nombre, iconos, permisos de Android (notificaciones, servicio en primer plano, arranque al encender), plugins. |
+| `app.json` | Configuración de Expo: nombre, iconos, permisos Android de notificaciones y servicio de reproducción en primer plano. `RECEIVE_BOOT_COMPLETED` aparece en permisos, pero la app no inicia la reproducción automáticamente al encender el móvil. |
 | `eas.json` | Perfiles de compilación (`development`/`preview`/`production`) usados por EAS Build. |
-| `plugins/withMusicForegroundService.js` | Config plugin que añade al `AndroidManifest.xml` el servicio en primer plano de reproducción y el receptor de botones de medios (auriculares, notificación). |
-| `src/context/MusicContext.js` | Estado global del reproductor (`expo-av`): cola, favoritos, heartbeat (con el contexto de playlist activo) y su versión inmediata al arrancar una canción para que los logros no tarden hasta 30s en reflejarse, notificación con controles de reproducción, reacciona al estado real de reproducción (interrupciones, llamadas, otras apps) en vez de fiarse de temporizadores manuales, y reproduce desde disco si la canción está descargada. También guarda el catálogo de logros y las estadísticas del usuario, y gestiona la cola de notificaciones de logros recién desbloqueados y el aviso de rate limit. |
+| `index.js` | Registra el servicio headless de Track Player en Android antes de registrar la app Expo. |
+| `src/services/MusicService.js` | Atiende acciones de reproducción remota (play/pausa/anterior/siguiente/seek) desde la sesión multimedia nativa y limpia entradas consumidas de la cola manual. |
+| `src/services/MusicNotification.js` | Helpers antiguos basados en Expo Notifications; los controles actuales de reproducción Android los proporciona Track Player. |
+| `patches/react-native-track-player+4.1.2.patch` | Ajuste local aplicado durante `npm install` con `patch-package`. |
+| `src/context/MusicContext.js` | Estado global de reproducción y cola: usa Track Player nativo en Android y `expo-av` en iOS, gestiona favoritos, heartbeat, seek, reproducción offline, logros y estadísticas. |
 | `src/context/SettingsContext.js` | Tema (11 colores), idioma, foto de perfil (solo local, vía `expo-file-system`), conectividad (`@react-native-community/netinfo`) y descargas offline/caché. |
 | `src/theme.js` | Las 11 paletas de color, iguales a las de la app de PC. |
 | `src/i18n/` | Textos ES/EN de toda la interfaz (incluye logros/estadísticas). |
-| `src/screens/` | Pantallas: login, biblioteca, favoritos, colecciones, ajustes (con la sección nueva "Logros" de estadísticas + catálogo de logros reales). |
-| `src/components/` | Barra y modal del reproductor, fila de canción, texto con marquesina para títulos largos, iconos, el toast de logro desbloqueado y el aviso de rate limit. |
+| `src/utils/mediaUrl.js` | Normaliza URLs y rutas locales de audio/portadas para streaming y descargas. |
+| `src/screens/` | Pantallas: login, biblioteca, favoritos, colecciones y ajustes (perfil, logros, estadísticas, apariencia, descargas offline y créditos). |
+| `src/components/` | Barra y modal del reproductor con seek y cola manual, fila de canción, marquesina, iconos, toasts de logros y aviso de rate limit. |
 
 ### Notas de la app móvil
 
 - La foto de perfil y las canciones/playlists descargadas para offline se guardan con `expo-file-system` en el almacenamiento propio de la app — nunca se suben al servidor ni son visibles para otras apps.
 - El reproductor comprueba primero si la canción está descargada en disco antes de hacer streaming; si no lo está, sigue funcionando igual que siempre mientras haya conexión.
-- La notificación de reproducción (con los controles de anterior/pausa/siguiente) se mantiene sincronizada con el estado real del audio nativo, así que también refleja correctamente pausas provocadas por el sistema (una llamada entrante, otra app tomando el audio, etc.), no solo las que inicia el usuario desde la app.
+- En Android, Track Player mantiene la reproducción y los controles de medios del sistema en segundo plano/pantalla bloqueada. La disponibilidad del servicio no garantiza que el sistema permita reproducir automáticamente tras reiniciar el teléfono; Android puede aplicar restricciones de batería y ejecución en segundo plano.
 - El indicador de "sin conexión" usa `@react-native-community/netinfo`, que reacciona a cambios de red en tiempo real sin necesidad de peticiones de comprobación.
-- Los **logros y estadísticas** (Ajustes → Logros) sí se sincronizan con el servidor — es la única sección de Ajustes que no es solo-local. Ver [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario).
+- Los **logros y estadísticas** sí se sincronizan con el servidor; las preferencias de apariencia, idioma y las descargas offline son locales. Ver [Logros y estadísticas por usuario](#logros-y-estadísticas-por-usuario).
 
 ---
 
@@ -915,17 +925,19 @@ La documentación completa de cada endpoint, con parámetros, cuerpos de petici�
 | Prefijo | Plataforma | Autenticación | Duración de sesión |
 |---|---|---|---|
 | `/api/` | Android | Bearer token | 30 días |
-| `/pc/` | Windows | Bearer token | 30 días |
+| `/pc/` | Escritorio y Samsung TV | Bearer token o cookie `pc_token` | 30 días |
 | `/web/` | Panel admin | Cookie JWT | 3 días |
 | `/bot/` | Bots | API key | — |
 
 ### Flujo de autenticación
 
-1. El cliente envía credenciales al endpoint de login de su plataforma.
-2. El servidor verifica el hash de la contraseña.
-3. El servidor emite un JWT (o cookie `web_token` para el panel web).
-4. El cliente incluye el token en cada petición: `Authorization: Bearer <token>`.
-5. El middleware valida el token antes de ejecutar el handler.
+1. El cliente envía credenciales a `/api/login`, `/pc/login` o `/web/login`.
+2. El servidor compara el hash de contraseña almacenado.
+3. `/api` y `/pc` devuelven el JWT en JSON; `/web` establece la cookie HttpOnly `web_token`.
+4. Las APIs móvil/PC envían `Authorization: Bearer <token>`; el panel web envía la cookie con credenciales.
+5. Los middlewares verifican firma y expiración. El rol `superadmin` se asigna por nombre de usuario exacto `rexy`, no mediante una tabla de roles.
+
+**Integración pendiente en el panel:** `servidor/web/src/pages/VersionPage.tsx` carga el changelog desde `/api/changelog` usando `localStorage.token`, pero la sesión del panel se autentica con la cookie `web_token`. Como `/api/changelog` exige el JWT móvil, esa petición suele devolver `401`; no hay una ruta `/web/changelog` alternativa actualmente. El contrato backend completo está en [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md).
 
 ---
 
@@ -935,7 +947,7 @@ Cada usuario tiene un catálogo de **logros** (100 de base) y unas **estadístic
 
 ### Vincular usuarios ya existentes
 
-No hace falta ninguna migración de datos. Todas las tablas nuevas (ver [Tablas de MySQL](#tablas-de-mysql)) usan `user_id VARCHAR(36)` con `FOREIGN KEY ... REFERENCES users(id)`, la misma clave primaria que ya tiene cada usuario. Como esa tabla y esos IDs ya existen, todos los usuarios actuales quedan vinculados automáticamente en el momento en que:
+Para las tablas auxiliares de logros/estadísticas no hace falta transformar IDs de usuarios que ya estén en MySQL: usan `user_id VARCHAR(36)` con `FOREIGN KEY ... REFERENCES users(id)`. Esto no migra los antiguos archivos JSON ni prepara las tablas principales. Los usuarios actuales quedan vinculados automáticamente en el momento en que:
 
 - Hacen login (`/api/login`, `/pc/login`): se evalúan sus logros por primera vez (verá los que ya cumple, por ejemplo por antigüedad de cuenta).
 - Mandan un heartbeat reproduciendo algo: se crea su fila en `user_listening_stats` (con `INSERT ... ON DUPLICATE KEY UPDATE`, no hace falta crearla a mano antes).
@@ -1064,12 +1076,12 @@ Actualmente esto está implementado en el **servidor**, en la **app de PC** (`Pr
 
 ## Protección anti-spam / rate limiting
 
-Implementado en `servidor/lib/rateLimit.js`, aplicado en `server.js`. Todas las APIs (`/api/`, `/pc/`, `/web/`, `/bot/` y las rutas públicas) están protegidas contra flood con limitadores en memoria, sin tablas MySQL adicionales, por dos motivos: es más rápido (no añade una consulta a MySQL en cada petición de la API) y los baneos son de corta/media duración (minutos-horas), así que no merece la pena persistirlos en disco; si el servidor se reinicia, simplemente se limpian y se empieza de cero, lo cual es aceptable para este caso de uso. Si en el futuro se necesitan bans permanentes por abuso grave, se puede añadir una tabla `blocked_keys` y consultarla solo en el paso de "¿está baneada esta clave?" (una única query barata), pero de momento no hacía falta para un nivel razonable de seguridad.
+Implementado en `servidor/lib/rateLimit.js`, aplicado en `server.js`. Hay un límite global por IP y límites específicos para las rutas de login, heartbeat, API móvil, API de PC y bot. Los contadores viven en memoria, sin consultas adicionales a MySQL por petición. La mayoría de los limitadores responden con `429` y `Retry-After`; el baneo progresivo está habilitado específicamente para el login web (`/web/login`), no para todas las APIs. Si el proceso se reinicia, los contadores y bloqueos temporales se limpian.
 
 Cómo funciona:
 
 1. Ventana fija por clave. Cada limitador cuenta peticiones en una ventana de tiempo (`windowMs`) para una "clave" (`keyFn`). Si se pasa de `max`, responde `429 Too Many Requests` con `Retry-After`.
-2. Baneo progresivo. Si una misma clave dispara el límite muchas veces seguidas (6 veces en 10 minutos), se le aplica un bloqueo de 30 minutos con `403 Forbidden`. Si reincide después de cumplir el bloqueo, el siguiente baneo dura el doble (60 min, 120 min...) hasta un tope de 12 horas.
+2. Baneo progresivo en `/web/login`. Si una misma clave excede su límite en 6 ventanas distintas dentro de 10 minutos, se aplica un bloqueo de 30 minutos con `403 Forbidden`. Si reincide después de cumplir el bloqueo, el siguiente baneo dura el doble (60 min, 120 min...) hasta un tope de 12 horas. Este baneo no está activado en los demás limitadores.
 3. La clave no siempre es la IP. Para `/api`, `/pc` y `/web` se intenta identificar al usuario decodificando su JWT (sin verificar firma, solo para repartir el contador de forma justa; la autenticación real la sigue haciendo el middleware de auth de siempre) y, si no hay token, se cae a IP. Para `/bot` se usa la cabecera `X-Bot-Key`. Así, varios usuarios detrás del mismo router no se penalizan entre ellos, y un usuario que también entra desde el móvil y el PC no agota su propio límite el doble de rápido de forma injusta, aunque sí comparte límite entre ambos si usa la misma cuenta en los dos a la vez, lo cual es razonable.
 
 Límites configurados:
@@ -1077,29 +1089,27 @@ Límites configurados:
 | Limitador | Ventana | Máximo | Aplica a |
 |---|---|---|---|
 | `globalIpLimiter` | 60 s | 400 | Todo el servidor (backstop por IP) |
-| `loginLimiter` | 15 min | 15 | `/api/login`, `/pc/login`, `/web/login` |
+| `loginLimiter` | 15 min | 15 | `/api/login`, `/pc/login` |
+| `webLoginLimiter` | 15 min | 15 | `/web/login` (baneo progresivo tras infracciones repetidas) |
 | `heartbeatLimiter` | 10 s | 60 | `/api/heartbeat`, `/api/latency`, `/pc/heartbeat`, `/pc/latency` |
 | `apiLimiter` | 60 s | 180 | Resto de `/api/*` |
 | `pcLimiter` | 60 s | 180 | Resto de `/pc/*` |
-| `webLimiter` | 60 s | 240 | `/web/*` |
 | `botLimiter` | 60 s | 240 | `/bot/*` |
-| `uploadLimiter` | 60 s | 20 | `/api/upload` (además del límite general) |
 
-El límite de heartbeat es deliberadamente generoso para no penalizar a quien cambia de canción o pausa/reanuda muy seguido, y es independiente del límite general de `/api`. Solo entra en juego si algo manda heartbeats de forma claramente anómala (varias peticiones por segundo de forma sostenida, típico de un bug de cliente o un ataque). Si en algún momento se notan falsos positivos con usuarios legítimos, los números están todos centralizados al principio de `servidor/lib/rateLimit.js` (`createRateLimiter({ windowMs, max, ... })`) y son fáciles de ajustar. Como los baneos viven solo en memoria, reiniciar el servidor libera al momento a cualquier clave bloqueada, sin tener que esperar a que expire el bloqueo.
+El límite de heartbeat es deliberadamente generoso para no penalizar a quien cambia de canción o pausa/reanuda muy seguido, y es independiente del límite general de `/api`. Solo entra en juego si algo manda heartbeats de forma claramente anómala (varias peticiones por segundo de forma sostenida, típico de un bug de cliente o un ataque). Si en algún momento se notan falsos positivos con usuarios legítimos, los números están todos centralizados al principio de `servidor/lib/rateLimit.js` (`createRateLimiter({ windowMs, max, ... })`) y son fáciles de ajustar. El baneo progresivo y los contadores viven en memoria; reiniciar el servidor los limpia.
 
-Aviso amistoso antes del bloqueo: `heartbeatLimiter`, `apiLimiter` y `pcLimiter` tienen activado un aviso previo (`warnAt`) al 70-75% de su límite. Al cruzar ese umbral por primera vez dentro de la ventana de tiempo, la petición se deja pasar con normalidad (no es un bloqueo), pero la respuesta incluye un campo `warning` con un mensaje en texto, para que el cliente muestre una notificación tipo "estás yendo muy rápido, tómatelo con calma" antes de que el bloqueo real (429, y más adelante el baneo temporal) llegue a activarse. En la app de PC este aviso lo muestra el componente `RateLimitWarningToast.jsx`. El aviso se manda como mucho una vez por ventana de tiempo por clave, para no ser pesado si la persona sigue al límite un rato largo.
+Aviso amistoso antes del límite: `heartbeatLimiter`, `apiLimiter` y `pcLimiter` tienen activado un aviso previo al 70-75% de su máximo. La petición se deja pasar con normalidad y la respuesta puede incluir `warning`; el aviso se envía como máximo una vez por ventana y clave. En la app de PC lo muestra `RateLimitWarningToast.jsx`. Al exceder el máximo, el limitador responde `429`; solo el limitador de login web aplica además el baneo progresivo descrito arriba.
 
 ---
 
 ## Seguridad
 
-- Contraseñas hasheadas con SHA-256 + salt.
-- Tokens JWT con expiración configurable.
-- CORS habilitado para múltiples orígenes.
-- Validación de tipo y tamaño de archivo en subidas.
-- Middlewares de autenticación en todas las rutas protegidas.
-- Acceso al panel web restringido a rol `superadmin`.
-- Rate limiting con baneo progresivo en todas las APIs (ver [Protección anti-spam / rate limiting](#protección-anti-spam--rate-limiting)).
+- Las contraseñas se hashean con SHA-256 y un salt fijo del código; no es un algoritmo de almacenamiento de contraseñas resistente como bcrypt/Argon2. La dependencia `bcrypt` no se usa en el middleware actual.
+- Hay secretos JWT de desarrollo por defecto en el código. Define `JWT_SECRET`, `PC_JWT_SECRET` y `WEB_JWT_SECRET` con valores aleatorios y distintos antes de exponer el servidor; también configura credenciales MySQL explícitas.
+- CORS refleja el origen entrante y permite credenciales. `web_token` se configura con `secure: false`; limita el acceso al servidor mediante HTTPS/proxy y revisa esa cookie antes de exponer el panel públicamente.
+- La validación de uploads no es uniforme: audio valida extensión pero no limita tamaño; la portada subida al endpoint móvil no valida tipo/tamaño; las imágenes del panel aceptan PNG/JPG/JPEG/WEBP con máximo de 8 MiB.
+- No todas las operaciones de biblioteca requieren `superadmin`: cualquier usuario móvil autenticado puede subir, editar o borrar canciones globales. Algunas rutas web de lectura y actualización de versión también solo exigen una cookie válida. Consulta las advertencias por endpoint en [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md).
+- Los límites y baneos de `rateLimit.js` se guardan en memoria y se reinician con el proceso; no sustituyen autorización ni validación de entradas.
 
 ---
 
@@ -1162,11 +1172,9 @@ POST /api/songs/:id/cover
 Content-Type: multipart/form-data
 campo: cover  (imagen)
 ```
-El servidor la guarda como `canciones/{id}.jpg` (o la extensión que subas) y actualiza el `coverUrl` de esa canción. En la app de PC se hace desde el modal de edición de canción (icono de cámara) o desde la pantalla grande del reproductor.
+El servidor convierte la imagen a WebP (máximo 1200 px por lado) y la guarda en `servidor/portadas/` con el nombre `Título - Artista.webp`. Así otras canciones con el mismo título y artista pueden reutilizar esa portada. Después actualiza el `coverUrl` de la canción. Requiere que `ffmpeg` esté instalado en el servidor. En la app de PC se hace desde el modal de edición de canción (icono de cámara) o desde la pantalla grande del reproductor.
 
 **B) Carátulas en lote, dejándolas en `servidor/portadas/`:**
-
->  Esto es **100% manual**: el servidor no descarga ni genera ninguna carátula por su cuenta. Tienes que conseguir tú la imagen (descargarla, recortarla, etc.) y subirla tú mismo a `servidor/portadas/` con el nombre correcto — el servidor solo se encarga de **emparejarla** con la canción que ya tienes, no de buscarla ni crearla.
 
 Si tienes muchas carátulas ya descargadas (por ejemplo, junto a las canciones al bajarlas de YouTube), puedes meterlas todas en:
 ```text
@@ -1187,6 +1195,16 @@ POST /api/refresh-covers
 ```
 (o `POST /pc/refresh-covers` desde la app de PC) para que relacione las carátulas nuevas con canciones que **ya existían** en la biblioteca. Las canciones que subas o sincronices **a partir de ahora** recogen su carátula sola si el nombre coincide, sin necesidad de este paso extra.
 
+Las portadas subidas manualmente desde el panel de administración (playlists y canciones) también se convierten a WebP, con un máximo de 1200 px por lado; estas subidas requieren `ffmpeg`.
+
+### Búsqueda automática de portadas para playlists de carpetas
+
+Al iniciar, el servidor sincroniza las playlists de carpetas sin bloquear el arranque de la web. Cuando el servidor HTTP ya está disponible, reintenta en segundo plano las canciones de esas playlists que todavía no tienen portada. El flujo también se aplica al sincronizar canciones nuevas en una playlist de carpeta. **No inicia búsquedas externas para las canciones sueltas de `servidor/canciones/`.**
+
+La resolución de una portada sigue este orden: imagen incrustada en el audio, archivo de portada local coincidente, miniatura de YouTube cuando hay un ID disponible, búsqueda en Deezer y, como alternativa, iTunes. La consulta intenta limpiar nombres de vídeo y separar artista/título; si no encuentra resultados, puede probar con el título solo. Las imágenes descargadas se guardan en `servidor/portadas/` para reutilizarlas. Se convierten a WebP si `ffmpeg` está disponible.
+
+Las consultas se almacenan en `servidor/data/artwork-cache.json`, incluidas las búsquedas sin resultado, para evitar repetirlas. Las llamadas a cada proveedor se serializan, se limitan y aplican espera exponencial ante respuestas `429` respetando `Retry-After`; ante `403`, se pausa temporalmente ese proveedor. El comportamiento está implementado en `servidor/lib/covers.js` y `servidor/lib/coverFiles.js`. Para que la búsqueda identifique bien el tema, se recomienda nombrar los archivos como `Título - Artista.mp3` o incluir esos datos en sus etiquetas.
+
 ### Crear playlists
 
 Hay dos tipos, y se crean de formas totalmente distintas:
@@ -1202,7 +1220,7 @@ Se pueden editar (`PUT /api/playlists/:id`) o borrar (`DELETE /api/playlists/:id
 
 **2. Playlists automáticas por carpetas** (públicas para todos, no se crean por API):
 
->  Esto también es **100% manual**: no hay ningún botón ni endpoint que cree la carpeta, suba las canciones o ponga la portada por ti. Tienes que hacer tú, a mano, en el sistema de archivos del servidor: **1)** crear la carpeta, **2)** meter dentro los archivos de audio, y **3)** si quieres portada, subir tú la imagen con el nombre exacto. El servidor solo detecta lo que ya has puesto ahí y lo convierte en playlist.
+> La carpeta se crea manualmente en el sistema de archivos del servidor. Una vez existe, puedes añadir canciones desde el panel web o copiarlas a la carpeta; el servidor detecta y sincroniza los cambios automáticamente.
 
 Se crean **poniendo una carpeta** dentro de `servidor/playlist/`. El nombre de la carpeta pasa a ser el nombre de la playlist, y cualquier archivo de audio que metas dentro forma parte de ella automáticamente:
 
@@ -1253,8 +1271,8 @@ Y, a nivel **por usuario** (ver [Logros y estadísticas por usuario](#logros-y-e
 | --- | --- |
 | `npm start` | Inicia el servidor. |
 | `npm run dev` | Inicia el servidor en modo desarrollo. |
-| `npm run migrate` | Ejecuta la migración de datos a MySQL. |
-| `npm run final-fix` | Ejecuta el script de corrección final de la base de datos. |
+| `npm run migrate` | Declarado en `package.json`, pero el archivo `migrate-to-mysql.js` no existe en este workspace; no funciona. |
+| `npm run final-fix` | Declarado en `package.json`, pero el archivo `final-fix.js` no existe en este workspace; no funciona. |
 | `npm run web:install` | Instala las dependencias del panel web. |
 | `npm run web:dev` | Inicia el panel web en modo desarrollo. |
 | `npm run web:build` | Genera la versión de producción del panel web. |
@@ -1270,6 +1288,7 @@ Y, a nivel **por usuario** (ver [Logros y estadísticas por usuario](#logros-y-e
 | `npm run build` | Genera la compilación de producción. |
 | `npm run dist` | Genera el instalador de Windows (`.exe`). |
 | `npm run dist:linux` | Genera los instaladores para Linux (`AppImage` y `.deb`). |
+| `npm run dist:linux:appimage` | Genera el AppImage con runtime estático e información de actualización GitHub, además del `.zsync`; los dos archivos deben publicarse juntos. |
 | `npm run dist:all` | Genera los instaladores para Windows y Linux. |
 
 ---
@@ -1289,7 +1308,7 @@ Empaquetado e instalación en la TV: no son scripts de `npm`, se hacen con la CL
 | Script | Descripción |
 | --- | --- |
 | `npm start` | Inicia el proyecto con Expo (Metro Bundler). |
-| `npm run android` | Compila e inicia la aplicación en un emulador o dispositivo Android conectado. |
+| `npm run android` | Compila e inicia la aplicación nativa en un emulador o dispositivo Android conectado. |
 | `npm run ios` | Compila e inicia la aplicación en un simulador o dispositivo iOS conectado. |
 | `npm run web` | Inicia la aplicación en modo web mediante Expo. |
 
@@ -1300,16 +1319,17 @@ Empaquetado e instalación en la TV: no son scripts de `npm`, se hacen con la CL
 **El servidor no inicia**
 
 ```bash
-npm install         # Verificar dependencias
-npm run validate    # Validar configuración
-# Asegurarse de que el puerto 6666 esté disponible
+npm install
+npm start
+# Comprueba que SERVER_PORT esté libre y que MySQL responda.
 ```
 
 **Errores de autenticación**
 
 - Verificar que el token no haya expirado.
-- Comprobar que el header sea exactamente `Authorization: Bearer <token>`.
-- Para el panel web, verificar que la cookie `web_token` sea válida.
+- Comprueba que el JWT se haya solicitado al prefijo correcto: `/api` y `/pc` usan secretos distintos.
+- En web, conserva la cookie `web_token` y envía credenciales (`credentials: 'include'`).
+- Si login devuelve `401`, confirma que el usuario está en la tabla MySQL `users`, no solo en el archivo JSON legado.
 
 **Las canciones no se sincronizan**
 
@@ -1321,6 +1341,7 @@ POST /api/sync
 **No se desbloquean logros / no aparecen estadísticas**
 
 - Comprueba que el servidor arrancó sin errores de MySQL (las tablas de logros/estadísticas se crean solas al arrancar, revisa los logs de `[MYSQL]`).
+- Confirma que existen `stats` y su fila `id = 1`; la tabla principal de estadísticas no se crea al arrancar.
 - Los logros se evalúan en el heartbeat solo cuando cambia de canción (`isPlaying: true` y `songId` distinto al anterior); si dejas la misma canción sonando en bucle, la mayoría de logros de "reproducciones" no avanzan hasta el siguiente cambio.
 - El catálogo puede estar vacío si has desactivado logros desde `/web/achievements` sin querer — revisa `active` en la tabla `achievements`.
 
@@ -1330,4 +1351,4 @@ POST /api/sync
 
 Privada — YFitops 2026
 
-*Última actualización: 16 de julio de 2026*
+*Última actualización: 22 de octubre de 2026*

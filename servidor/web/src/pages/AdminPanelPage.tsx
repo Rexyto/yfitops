@@ -86,6 +86,8 @@ function PlaylistManager() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [name, setName] = useState('');
+  const [editingSong, setEditingSong] = useState<Song | null>(null);
+  const [songMetadata, setSongMetadata] = useState({ title: '', artist: '', album: '' });
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -163,17 +165,37 @@ function PlaylistManager() {
     notify('Canción añadida a la playlist.');
   };
 
-  const editSong = async (song: Song) => {
-    if (!selected) return;
-    const title = window.prompt('Nuevo nombre de la canción', song.title);
-    if (!title?.trim() || title.trim() === song.title) return;
-    const response = await fetch(`/web/admin/playlists/${selected.type}/${selected.id}/songs/${song.id}`, {
-      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.trim() }),
+  const startEditingSong = (song: Song) => {
+    setEditingSong(song);
+    setSongMetadata({
+      title: song.title,
+      artist: song.artist || '',
+      album: song.album || '',
     });
-    if (!response.ok) return setError('No se pudo editar la canción');
+  };
+
+  const editSong = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected) return;
+    if (!editingSong || !songMetadata.title.trim()) return;
+    const response = await fetch(`/web/admin/playlists/${selected.type}/${selected.id}/songs/${editingSong.id}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: songMetadata.title.trim(),
+        artist: songMetadata.artist.trim(),
+        album: songMetadata.album.trim(),
+      }),
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      return setError(result.error || 'No se pudieron guardar los metadatos');
+    }
     const updated = await response.json();
-    setPlaylists(current => current.map(item => item.type === selected.type && item.id === selected.id ? { ...item, songs: item.songs.map(currentSong => currentSong.id === song.id ? updated : currentSong) } : item));
-    notify('Nombre de canción actualizado.');
+    setPlaylists(current => current.map(item => item.type === selected.type && item.id === selected.id ? { ...item, songs: item.songs.map(currentSong => currentSong.id === editingSong.id ? updated : currentSong) } : item));
+    setEditingSong(null);
+    notify('Metadatos de la canción actualizados.');
   };
 
   const deleteSong = async (song: Song) => {
@@ -215,13 +237,26 @@ function PlaylistManager() {
               <div className="song-cover-small">{song.coverUrl ? <img src={song.coverUrl} alt="" /> : <span>♪</span>}</div>
               <div className="admin-song-info"><strong>{song.title}</strong><span>{song.artist || 'Artista desconocido'}{song.album ? ` · ${song.album}` : ''}</span></div>
               <label className="icon-action" title="Subir portada"><span>▧</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) upload(`/web/admin/playlists/${selected.type}/${selected.id}/songs/${song.id}/cover`, file, 'Portada de canción actualizada.').catch(error => setError(error.message)); }} /></label>
-              <button className="icon-action" title="Editar nombre" onClick={() => editSong(song)}>✎</button>
+              <button className="icon-action" title="Editar metadatos" onClick={() => startEditingSong(song)}>✎</button>
               <button className="icon-action danger" title="Eliminar canción" onClick={() => deleteSong(song)}>×</button>
             </div>)}
             {!filteredSongs.length && <div className="empty">No hay canciones que mostrar.</div>}
           </div>
         </section> : <div className="empty playlist-empty">Selecciona una playlist para comenzar.</div>}
       </div>
+      {editingSong && <div className="admin-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setEditingSong(null); }}>
+        <form className="admin-metadata-modal" onSubmit={editSong} aria-labelledby="admin-metadata-title">
+          <div className="admin-kicker">METADATOS DE CANCIÓN</div>
+          <h3 id="admin-metadata-title">Editar canción</h3>
+          <label>Título<input className="input" autoFocus maxLength={500} value={songMetadata.title} onChange={event => setSongMetadata(current => ({ ...current, title: event.target.value }))} required /></label>
+          <label>Artista<input className="input" maxLength={255} value={songMetadata.artist} onChange={event => setSongMetadata(current => ({ ...current, artist: event.target.value }))} /></label>
+          <label>Álbum<input className="input" maxLength={255} value={songMetadata.album} onChange={event => setSongMetadata(current => ({ ...current, album: event.target.value }))} /></label>
+          <div className="admin-metadata-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setEditingSong(null)}>Cancelar</button>
+            <button type="submit" className="btn btn-primary">Guardar cambios</button>
+          </div>
+        </form>
+      </div>}
     </div>
   );
 }

@@ -25,14 +25,21 @@ export default function LoginScreen({ onLogin, serverUrl }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password: password.trim() }),
       });
-      const data = await response.json();
       if (!response.ok) {
-        Alert.alert(t('login.errorTitle'), data.error || t('login.errorCreds'));
+        let data = null;
+        try {
+          data = await response.json();
+        } catch {}
+        const message = response.status >= 500
+          ? t('login.errorServer', serverUrl, response.status)
+          : data?.error || t('login.errorCreds');
+        Alert.alert(t('login.errorTitle'), message);
         return;
       }
+      const data = await response.json();
       onLogin(data.token, data.username);
     } catch (e) {
-      Alert.alert(t('login.errorConnectionTitle'), t('login.errorConnection'));
+      Alert.alert(t('login.errorConnectionTitle'), t('login.errorConnection', serverUrl, e.message));
     } finally {
       setLoading(false);
     }

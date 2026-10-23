@@ -6,9 +6,10 @@ import { MusicContext } from '../context/MusicContext';
 import { useSettings } from '../context/SettingsContext';
 import { useTheme } from '../theme';
 import { useT } from '../i18n';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 export default function SongsScreen() {
-  const { songs, playSong, uploadSong, deleteSong, toggleFavorite, favorites, currentSong, SERVER_URL, onLogout, fetchSongs, activeListeners, fetchListeners, addToQueue } = useContext(MusicContext);
+  const { songs, playSong, uploadSong, deleteSong, toggleFavorite, favorites, currentSong, SERVER_URL, onLogout, fetchSongs, loadPlaylists, fetchFolderPlaylists, activeListeners, fetchListeners, addToQueue } = useContext(MusicContext);
   const { downloadedSongIds } = useSettings();
   const { colors } = useTheme();
   const t = useT();
@@ -58,7 +59,7 @@ export default function SongsScreen() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await fetchSongs();
+      await Promise.all([fetchSongs(), loadPlaylists(), fetchFolderPlaylists()]);
     } finally {
       setSyncing(false);
     }
@@ -74,7 +75,7 @@ export default function SongsScreen() {
     const isActive = currentSong?.id === item.id;
     const isFav = favorites.includes(item.id);
     const isDownloaded = downloadedSongIds.includes(String(item.id));
-    const cover = item.coverUrl ? `${SERVER_URL}${item.coverUrl}` : null;
+    const cover = resolveMediaUrl(SERVER_URL, item.coverUrl);
     return (
       <TouchableOpacity
         style={[styles.songRow, isActive && styles.songRowActive]}

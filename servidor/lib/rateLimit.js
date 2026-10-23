@@ -6,8 +6,8 @@ import jwt from 'jsonwebtoken';
 // Estrategia (todo en memoria):
 //   1. Ventana fija por "clave" (IP, usuario o clave de bot):
 //      si se supera `max` peticiones en `windowMs`, se responde 429.
-//   2. Si una clave se pasa de la ventana repetidamente (más de
-//      VIOLATION_THRESHOLD veces en VIOLATION_WINDOW_MS), se le
+//   2. Si una clave supera el límite en varias ventanas distintas
+//      (VIOLATION_THRESHOLD veces en VIOLATION_WINDOW_MS), se le
 //      aplica un bloqueo temporal (403) que se va alargando si
 //      reincide (30 min, 60 min, 120 min... hasta un tope de 12h).
 //
@@ -22,7 +22,7 @@ const violations = new Map();
 const banHistory = new Map();  
 const bans = new Map();        
 const VIOLATION_WINDOW_MS = 10 * 60 * 1000; // 10 minutos
-const VIOLATION_THRESHOLD = 6;              // 6 bloqueos en la ventana -> ban
+const VIOLATION_THRESHOLD = 6;              // 6 ventanas excedidas -> ban
 const BASE_BAN_MS = 30 * 60 * 1000;         // 30 minutos
 const MAX_BAN_MS = 12 * 60 * 60 * 1000;     // tope: 12 horas
 
@@ -63,6 +63,7 @@ function recordViolation(key) {
 // ── Fábrica de limitadores ─────────────────────────────────
 export function createRateLimiter({
   windowMs, max, keyFn = getClientIp, name = 'default',
+  banOnViolation = false,
   warnAt = null, warnMessage = 'Estás mandando peticiones muy seguido. Tómatelo con calma o podrías acabar bloqueado temporalmente.',
 }) {
   return function rateLimiter(req, res, next) {
@@ -73,7 +74,8 @@ export function createRateLimiter({
       baseKey = getClientIp(req);
     }
 
-    if (isBanned(baseKey)) {
+    const violationKey = `${name}:${baseKey}`;
+    if (banOnViolation && isBanned(violationKey)) {
       return res.status(403).json({ error: 'Bloqueado temporalmente por actividad sospechosa. Inténtalo más tarde.' });
     }
 
@@ -81,13 +83,16 @@ export function createRateLimiter({
     const now = Date.now();
     let bucket = buckets.get(key);
     if (!bucket || now > bucket.resetAt) {
-      bucket = { count: 0, resetAt: now + windowMs, warned: false };
+      bucket = { count: 0, resetAt: now + windowMs, warned: false, violationRecorded: false };
       buckets.set(key, bucket);
     }
     bucket.count++;
 
     if (bucket.count > max) {
-      recordViolation(baseKey);
+      if (banOnViolation && !bucket.violationRecorded) {
+        bucket.violationRecorded = true;
+        recordViolation(violationKey);
+      }
       res.set('Retry-After', Math.ceil((bucket.resetAt - now) / 1000).toString());
       return res.status(429).json({ error: 'Demasiadas solicitudes. Reduce la frecuencia e inténtalo de nuevo en unos segundos.' });
     }
@@ -150,6 +155,10 @@ export const loginLimiter = createRateLimiter({
   windowMs: 15 * 60_000, max: 15, keyFn: getClientIp, name: 'login',
 });
 
+export const webLoginLimiter = createRateLimiter({
+  windowMs: 15 * 60_000, max: 15, keyFn: getClientIp, name: 'web-login', banOnViolation: true,
+});
+
 // Heartbeat/latencia: se llama muy seguido (cada pocos segundos),
 // así que el límite es generoso y NO penaliza cambiar de canción
 // varias veces seguidas ni pausar/reanudar repetidamente.
@@ -164,10 +173,6 @@ export const apiLimiter = createRateLimiter({
 
 export const pcLimiter = createRateLimiter({
   windowMs: 60_000, max: 180, keyFn: jwtIdOrIp({ cookieName: 'pc_token' }), name: 'pc', warnAt: 0.75,
-});
-
-export const webLimiter = createRateLimiter({
-  windowMs: 60_000, max: 240, keyFn: jwtIdOrIp({ cookieName: 'web_token' }), name: 'web',
 });
 
 export const botLimiter = createRateLimiter({

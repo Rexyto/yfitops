@@ -33,5 +33,13 @@ export const DEFAULT_STATS = {
 };
 export const DEFAULT_DATA = { songs: [], playlists: [] };
 export const DEFAULT_DATAPL = { playlists: [] };
-export const DEFAULT_VERSION = { version: '1.0.0', apkUrl: '' };
-export const DEFAULT_CHANGELOG = { version: '', notes: '' };
+export const DEFAULT_VERSION = {
+  version: '1.4.0',
+  apkUrl: '',
+  pc: { version: '1.3.0', exeUrl: '' }
+};
+export const DEFAULT_CHANGELOG = {
+  version: '1.4.0',
+  notes: 'Reproductor Android renovado con React Native Track Player para una reproducción más estable en segundo plano y con la pantalla bloqueada\nNotificación multimedia sincronizada con la canción, su portada y controles de reproducción\nCola manual mejorada: muestra las canciones añadidas por el usuario y permite controlar el avance y el retroceso\nBarra de reproducción corregida para buscar y actualizar la posición de la canción\nAjustes rediseñados: perfil, logros y estadísticas separados, apariencia y créditos mejorados\nDescargas offline reorganizadas con información de almacenamiento, recuentos y opciones para eliminar canciones o colecciones',
+  pc: { version: '1.3.0', notes: 'Arreglo de bugs' }
+};

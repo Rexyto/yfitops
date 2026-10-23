@@ -1,14 +1,16 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, Linking, TextInput,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, Linking, TextInput, BackHandler,
 } from 'react-native';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { MusicContext } from '../context/MusicContext';
 import { useSettings } from '../context/SettingsContext';
 import { useTheme, THEMES } from '../theme';
 import { useT } from '../i18n';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 function resolveSongsForPlaylist(playlist, type, allSongs) {
   if (type === 'folder') return playlist.songs || [];
@@ -18,9 +20,9 @@ function resolveSongsForPlaylist(playlist, type, allSongs) {
 function Section({ title, subtitle, children, onLayout, c, styles }) {
   return (
     <View style={styles.section} onLayout={onLayout}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      {title ? <Text style={styles.sectionTitle}>{title}</Text> : null}
       {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
-      <View style={styles.sectionBody}>{children}</View>
+      <View style={[styles.sectionBody, !title && !subtitle && styles.sectionBodyFirst]}>{children}</View>
     </View>
   );
 }
@@ -53,32 +55,85 @@ function DownloadableRow({ playlist, type, allSongs, isOnline, SERVER_URL, style
   };
 
   return (
-    <View style={styles.row}>
-      <View style={styles.rowMeta}>
-        <Text style={styles.rowName} numberOfLines={1}>{playlist.name}</Text>
-        <Text style={styles.rowSub}>{t('settings.downloads.songCount', count)}</Text>
+    <View style={styles.downloadCard}>
+      <View style={styles.downloadCardHeader}>
+        <View style={[styles.downloadArtwork, { backgroundColor: playlist.coverColor || colors.bg4 }]}>
+          {playlist.coverUrl
+            ? <Image source={{ uri: resolveMediaUrl(SERVER_URL, playlist.coverUrl) }} style={styles.downloadArtworkImage} />
+            : <Icon name="musical-notes" size={21} color={colors.text} />
+          }
+        </View>
+        <View style={styles.rowMeta}>
+          <Text style={styles.rowName} numberOfLines={2}>{playlist.name}</Text>
+          <Text style={styles.rowSub}>{t('settings.downloads.songCount', count)}</Text>
+        </View>
       </View>
-
       {downloading ? (
-        <Text style={styles.progressTag}>
+        <View style={styles.downloadStatus}>
+          <View style={styles.downloadStatusIcon}><Icon name="download-outline" size={17} color="#1ed760" /></View>
+          <Text style={styles.progressTag}>
           {progress ? t('settings.downloads.downloading', progress.done, progress.total) : '…'}
-        </Text>
+          </Text>
+        </View>
       ) : downloaded ? (
-        <View style={styles.rowActions}>
-          <Text style={styles.downloadedTag}>{t('settings.downloads.downloaded')}</Text>
-          <TouchableOpacity style={styles.dangerBtn} onPress={() => removeOfflinePlaylist(playlist.id)}>
+        <View style={styles.downloadActions}>
+          <View style={styles.downloadedStatus}>
+            <Icon name="checkmark-circle" size={17} color="#1ed760" />
+            <Text style={styles.downloadedTag}>{t('settings.downloads.downloaded')}</Text>
+          </View>
+          <TouchableOpacity style={styles.downloadRemoveBtn} onPress={() => removeOfflinePlaylist(playlist.id)}>
             <Text style={styles.dangerBtnText}>{t('settings.downloads.remove')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <TouchableOpacity
-          style={[styles.downloadBtn, !isOnline && styles.downloadBtnDisabled]}
+          style={[styles.downloadCardButton, !isOnline && styles.downloadBtnDisabled]}
           onPress={handleDownload}
           disabled={!isOnline || count === 0}
         >
-          <Text style={styles.downloadBtnText}>{t('settings.downloads.download')}</Text>
+          <Icon name="download-outline" size={17} color={isOnline && count > 0 ? '#000' : colors.textDim} />
+          <Text style={[styles.downloadCardButtonText, (!isOnline || count === 0) && styles.downloadCardButtonTextDisabled]}>{t('settings.downloads.download')}</Text>
         </TouchableOpacity>
       )}
+    </View>
+  );
+}
+
+function DownloadedPlaylistRow({ playlist, onRemove, SERVER_URL, styles, colors, t }) {
+  return (
+    <View style={styles.downloadedCard}>
+      <View style={[styles.downloadArtwork, { backgroundColor: playlist.coverColor || colors.bg4 }]}>
+        {playlist.coverUrl
+          ? <Image source={{ uri: resolveMediaUrl(SERVER_URL, playlist.coverUrl) }} style={styles.downloadArtworkImage} />
+          : <Icon name="musical-notes" size={21} color={colors.text} />
+        }
+      </View>
+      <View style={styles.downloadedCardMeta}>
+        <Text style={styles.rowName} numberOfLines={2}>{playlist.name}</Text>
+        <View style={styles.downloadedCardSub}>
+          <Icon name="checkmark-circle" size={15} color="#1ed760" />
+          <Text style={styles.downloadedTag}>{t('settings.downloads.songCount', playlist.songs?.length || 0)}</Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={styles.downloadedRemoveButton}
+        onPress={onRemove}
+        accessibilityRole="button"
+        accessibilityLabel={`${t('settings.downloads.remove')} ${playlist.name}`}
+      >
+        <Icon name="trash-outline" size={18} color="#ff6666" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function StorageGlyph({ styles }) {
+  return (
+    <View style={styles.downloadStorageIcon} accessible={false}>
+      <View style={styles.storageDrive}>
+        <View style={styles.storageDriveSlot} />
+        <View style={styles.storageDriveIndicator} />
+      </View>
     </View>
   );
 }
@@ -87,8 +142,8 @@ export default function SettingsScreen({ onLogout }) {
   const { playlists, folderPlaylists, songs, SERVER_URL } = useContext(MusicContext);
   const {
     profilePicture, uploadProfilePicture, removeProfilePicture,
-    language, setLanguage, isOnline, offlinePlaylists,
-    cacheBytes, cacheSizeLabel, clearCache,
+    language, setLanguage, isOnline, offlinePlaylists, downloadedSongIds,
+    cacheBytes, cacheSizeLabel, clearCache, removeOfflinePlaylist,
   } = useSettings();
   const {
     achievements, achievementsLoading, stats, statsLoading, fetchAchievements, fetchStats,
@@ -96,6 +151,7 @@ export default function SettingsScreen({ onLogout }) {
   const { theme, setTheme, colors } = useTheme();
   const t = useT();
   const styles = makeStyles(colors);
+  const insets = useSafeAreaInsets();
 
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -104,6 +160,7 @@ export default function SettingsScreen({ onLogout }) {
   const [achSearch, setAchSearch] = useState('');
   const [achStatusFilter, setAchStatusFilter] = useState('all'); // all | unlocked | locked
   const [achCategoryFilter, setAchCategoryFilter] = useState('all');
+  const [activeSection, setActiveSection] = useState(null);
 
   // Refresca logros/estadísticas cada vez que se entra en Ajustes (esta
   // pantalla se desmonta al cambiar de pestaña, así que esto equivale a
@@ -113,13 +170,14 @@ export default function SettingsScreen({ onLogout }) {
     fetchStats();
   }, []);
 
-  const scrollRef = useRef(null);
-  const sectionY = useRef({});
-  const scrollTo = (id) => {
-    const y = sectionY.current[id];
-    if (typeof y === 'number') scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
-  };
-  const captureY = (id) => (e) => { sectionY.current[id] = e.nativeEvent.layout.y; };
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!activeSection) return false;
+      setActiveSection(null);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [activeSection]);
 
   const handleUploadPic = async () => {
     setError('');
@@ -169,21 +227,45 @@ export default function SettingsScreen({ onLogout }) {
   });
   const achUnlockedCount = achievements.filter(a => a.unlocked).length;
 
-  const INDEX = [
-    { id: 'profile', icon: '👤', label: t('settings.index.profile') },
-    { id: 'stats', icon: '🏆', label: t('settings.index.stats') },
-    { id: 'appearance', icon: '🎨', label: t('settings.index.appearance') },
-    { id: 'downloads', icon: '⬇️', label: t('settings.index.downloads') },
-    { id: 'storage', icon: '💾', label: t('settings.index.storage') },
-    { id: 'credits', icon: '✨', label: t('settings.index.credits') },
-    { id: 'version', icon: 'ℹ️', label: t('settings.index.version') },
+  const SETTINGS_GROUPS = [
+    {
+      id: 'account',
+      title: t('settings.group.account'),
+      items: [
+        { id: 'profile', icon: '👤', label: t('settings.index.profile'), hint: t('settings.index.profileHint') },
+        { id: 'achievements', icon: '🏆', label: t('settings.index.achievements'), hint: t('settings.index.achievementsHint') },
+      ],
+    },
+    {
+      id: 'preferences',
+      title: t('settings.group.preferences'),
+      items: [
+        { id: 'appearance', icon: '🎨', label: t('settings.index.appearance'), hint: t('settings.index.appearanceHint') },
+        { id: 'downloads', icon: '⬇️', label: t('settings.index.downloads'), hint: t('settings.index.downloadsHint') },
+      ],
+    },
+    {
+      id: 'about',
+      title: t('settings.group.about'),
+      items: [
+        { id: 'credits', icon: '✨', label: t('settings.index.credits'), hint: t('settings.index.creditsHint') },
+      ],
+    },
   ];
+  const INDEX = SETTINGS_GROUPS.flatMap(group => group.items);
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('settings.title')}</Text>
-        <Text style={styles.headerSub}>{t('settings.subtitle')}</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        {activeSection ? (
+          <TouchableOpacity style={styles.backHeader} onPress={() => setActiveSection(null)} accessibilityRole="button" accessibilityLabel={t('playlists.back')}>
+            <Icon name="chevron-back" size={26} color={colors.text} />
+          </TouchableOpacity>
+        ) : null}
+        <View style={styles.headerText}>
+          <Text style={styles.headerTitle}>{activeSection ? INDEX.find(item => item.id === activeSection)?.label : t('settings.title')}</Text>
+          {!activeSection && <Text style={styles.headerSub}>{t('settings.mobileHint')}</Text>}
+        </View>
       </View>
 
       {!isOnline && (
@@ -192,92 +274,124 @@ export default function SettingsScreen({ onLogout }) {
         </View>
       )}
 
-      {/* Índice horizontal */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.indexRow} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-        {INDEX.map(item => (
-          <TouchableOpacity key={item.id} style={styles.indexChip} onPress={() => scrollTo(item.id)}>
-            <Text style={styles.indexChipText}>{item.icon} {item.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 140 }}>
-        {/* Perfil */}
-        <Section c={colors} styles={styles} onLayout={captureY('profile')} title={t('settings.profile.title')} subtitle={t('settings.profile.subtitle')}>
-          <View style={styles.profileRow}>
-            <View style={styles.avatarWrap}>
-              {profilePicture
-                ? <Image source={{ uri: profilePicture }} style={styles.avatarImg} />
-                : <View style={styles.avatarEmpty}><Text style={{ fontSize: 28 }}>👤</Text></View>
-              }
-            </View>
-            <View style={styles.profileActions}>
-              <TouchableOpacity style={styles.primaryBtn} onPress={handleUploadPic} disabled={uploading}>
-                <Text style={styles.primaryBtnText}>{profilePicture ? t('settings.profile.change') : t('settings.profile.upload')}</Text>
-              </TouchableOpacity>
-              {profilePicture && (
-                <TouchableOpacity style={styles.secondaryBtn} onPress={removeProfilePicture}>
-                  <Text style={styles.secondaryBtnText}>{t('settings.profile.remove')}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-          {!!error && <Text style={styles.errorText}>{error}</Text>}
-        </Section>
-
-        {/* Logros y estadísticas */}
-        <Section c={colors} styles={styles} onLayout={captureY('stats')} title={t('settings.stats.title')} subtitle={t('settings.stats.subtitle')}>
-          <View style={styles.statsGrid}>
-            {statCards.map((s, i) => (
-              <View key={i} style={styles.statCard}>
-                <Text style={styles.statIcon}>{s.icon}</Text>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.statValue}>{s.value}</Text>
-                  <Text style={styles.statLabel}>{s.label}</Text>
-                </View>
+      {!activeSection ? (
+        <ScrollView style={styles.menuScroll} contentContainerStyle={styles.menuContent} showsVerticalScrollIndicator={false}>
+          {SETTINGS_GROUPS.map(group => (
+            <View key={group.id} style={styles.menuSection}>
+              <Text style={styles.menuSectionTitle}>{group.title}</Text>
+              <View style={styles.menuGroup}>
+                {group.items.map((item, index) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.menuItem, index === group.items.length - 1 && styles.menuItemLast]}
+                    onPress={() => setActiveSection(item.id)}
+                    activeOpacity={0.65}
+                    accessibilityRole="button"
+                  >
+                    <View style={styles.menuIcon}><Text style={styles.menuEmoji}>{item.icon}</Text></View>
+                    <View style={styles.menuCopy}>
+                      <Text style={styles.menuLabel}>{item.label}</Text>
+                      <Text style={styles.menuHint} numberOfLines={1}>{item.hint}</Text>
+                    </View>
+                    <Icon name="chevron-forward" size={20} color={colors.textDim} />
+                  </TouchableOpacity>
+                ))}
               </View>
-            ))}
-          </View>
-
-          <View style={styles.highlightGrid}>
-            <View style={styles.highlightCard}>
-              <Text style={styles.highlightLabel}>🎵 {t('settings.stats.mostPlayedSong')}</Text>
-              {stats?.mostPlayedSong ? (
-                <>
-                  <Text style={styles.highlightTitle} numberOfLines={1}>{stats.mostPlayedSong.title}</Text>
-                  <Text style={styles.highlightSubtitle} numberOfLines={1}>{stats.mostPlayedSong.artist}</Text>
-                  <Text style={styles.highlightPlays}>{stats.mostPlayedSong.playCount}</Text>
-                </>
-              ) : (
-                <Text style={styles.highlightEmpty}>{statsLoading ? t('settings.stats.loading') : t('settings.stats.noDataYet')}</Text>
-              )}
             </View>
-            <View style={styles.highlightCard}>
-              <Text style={styles.highlightLabel}>📻 {t('settings.stats.mostPlayedPlaylist')}</Text>
-              {stats?.mostPlayedPlaylist ? (
-                <>
-                  <Text style={styles.highlightTitle} numberOfLines={1}>{stats.mostPlayedPlaylist.name}</Text>
-                  <Text style={styles.highlightSubtitle} numberOfLines={1}>
-                    {stats.mostPlayedPlaylist.type === 'folder' ? t('settings.stats.collectionTypeFolder') : t('settings.stats.collectionTypeManual')}
-                  </Text>
-                  <Text style={styles.highlightPlays}>{stats.mostPlayedPlaylist.playCount}</Text>
-                </>
-              ) : (
-                <Text style={styles.highlightEmpty}>{statsLoading ? t('settings.stats.loading') : t('settings.stats.noDataYet')}</Text>
-              )}
+          ))}
+          <TouchableOpacity
+            style={styles.logoutRow}
+            onPress={onLogout}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.logout')}
+          >
+            <Icon name="log-out-outline" size={18} color="#ff5555" />
+            <Text style={styles.logoutText}>{t('settings.logout')}</Text>
+          </TouchableOpacity>
+          <View style={styles.appInfo}>
+            <Image source={require('../../assets/icon.png')} style={styles.appLogo} resizeMode="cover" />
+            <View>
+              <Text style={styles.appInfoName}>YFitops</Text>
+              <Text style={styles.appInfoVersion}>v{appVersion}</Text>
             </View>
           </View>
+        </ScrollView>
+      ) : (
+      <ScrollView key={activeSection} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+        {/* Perfil y resumen de escucha */}
+        {activeSection === 'profile' && <>
+          <Section c={colors} styles={styles}>
+            <View style={styles.profileRow}>
+              <View style={styles.avatarWrap}>
+                {profilePicture
+                  ? <Image source={{ uri: profilePicture }} style={styles.avatarImg} />
+                  : <View style={styles.avatarEmpty}><Text style={{ fontSize: 28 }}>👤</Text></View>
+                }
+              </View>
+              <View style={styles.profileActions}>
+                <TouchableOpacity style={styles.primaryBtn} onPress={handleUploadPic} disabled={uploading}>
+                  <Text style={styles.primaryBtnText}>{profilePicture ? t('settings.profile.change') : t('settings.profile.upload')}</Text>
+                </TouchableOpacity>
+                {profilePicture && (
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={removeProfilePicture}>
+                    <Text style={styles.secondaryBtnText}>{t('settings.profile.remove')}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+            <Text style={styles.profilePrivacy}>{t('settings.profile.subtitle')}</Text>
+            {!!error && <Text style={styles.errorText}>{error}</Text>}
+          </Section>
 
-          <View style={styles.achDivider} />
+          <Section c={colors} styles={styles} title={t('settings.stats.title')} subtitle={t('settings.stats.subtitle')}>
+            <View style={styles.statsGrid}>
+              {statCards.map((s, i) => (
+                <View key={i} style={styles.statCard}>
+                  <Text style={styles.statIcon}>{s.icon}</Text>
+                  <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{s.value}</Text>
+                  <Text style={styles.statLabel} numberOfLines={2}>{s.label}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.highlightGrid}>
+              <View style={styles.highlightCard}>
+                <Text style={styles.highlightLabel}>🎵 {t('settings.stats.mostPlayedSong')}</Text>
+                {stats?.mostPlayedSong ? (
+                  <>
+                    <Text style={styles.highlightTitle} numberOfLines={1}>{stats.mostPlayedSong.title}</Text>
+                    <Text style={styles.highlightSubtitle} numberOfLines={1}>{stats.mostPlayedSong.artist}</Text>
+                    <Text style={styles.highlightPlays}>{stats.mostPlayedSong.playCount}</Text>
+                  </>
+                ) : (
+                  <Text style={styles.highlightEmpty}>{statsLoading ? t('settings.stats.loading') : t('settings.stats.noDataYet')}</Text>
+                )}
+              </View>
+              <View style={styles.highlightCard}>
+                <Text style={styles.highlightLabel}>📻 {t('settings.stats.mostPlayedPlaylist')}</Text>
+                {stats?.mostPlayedPlaylist ? (
+                  <>
+                    <Text style={styles.highlightTitle} numberOfLines={1}>{stats.mostPlayedPlaylist.name}</Text>
+                    <Text style={styles.highlightSubtitle} numberOfLines={1}>
+                      {stats.mostPlayedPlaylist.type === 'folder' ? t('settings.stats.collectionTypeFolder') : t('settings.stats.collectionTypeManual')}
+                    </Text>
+                    <Text style={styles.highlightPlays}>{stats.mostPlayedPlaylist.playCount}</Text>
+                  </>
+                ) : (
+                  <Text style={styles.highlightEmpty}>{statsLoading ? t('settings.stats.loading') : t('settings.stats.noDataYet')}</Text>
+                )}
+              </View>
+            </View>
+          </Section>
+        </>}
 
+        {/* Logros */}
+        {activeSection === 'achievements' && <Section c={colors} styles={styles} subtitle={t('settings.achievements.subtitle')}>
           <View style={styles.achHeadRow}>
-            <Text style={styles.achTitle}>{t('settings.achievements.title')}</Text>
+            <Text style={styles.achTitle}>{t('settings.achievements.progressTitle')}</Text>
             <View style={styles.achBadgeCount}>
               <Text style={styles.achBadgeCountText}>{t('settings.achievements.unlocked', achUnlockedCount, achievements.length)}</Text>
             </View>
           </View>
-          <Text style={styles.sectionSubtitle}>{t('settings.achievements.subtitle')}</Text>
-
           <TextInput
             style={styles.achSearch}
             placeholder={t('settings.achievements.searchPlaceholder')}
@@ -342,22 +456,28 @@ export default function SettingsScreen({ onLogout }) {
               );
             })
           )}
-        </Section>
+        </Section>}
 
         {/* Apariencia */}
-        <Section c={colors} styles={styles} onLayout={captureY('appearance')} title={t('settings.appearance.title')} subtitle={t('settings.appearance.subtitle')}>
+        {activeSection === 'appearance' && <Section c={colors} styles={styles} title={t('settings.appearance.title')} subtitle={t('settings.appearance.subtitle')}>
           <View style={styles.themeBlock}>
             <Text style={styles.toggleLabel}>{t('settings.appearance.themeLabel', t(`theme.${theme}`))}</Text>
             <Text style={styles.toggleHint}>{t('settings.appearance.themeHint')}</Text>
             <View style={styles.themePicker}>
-              {THEMES.map(themeDef => {
+              {THEMES.map((themeDef, index) => {
                 const isActive = theme === themeDef.id;
                 return (
                   <TouchableOpacity
                     key={themeDef.id}
-                    style={styles.themeSwatchBtn}
+                    style={[
+                      styles.themeSwatchBtn,
+                      THEMES.length % 3 === 2 && index === THEMES.length - 2 && styles.themeSwatchBtnLastRowStart,
+                      isActive && styles.themeSwatchBtnActive,
+                    ]}
                     onPress={() => setTheme(themeDef.id)}
                     accessibilityLabel={t(`theme.${themeDef.id}`)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
                   >
                     <View style={[styles.themeSwatchWrap, isActive && styles.themeSwatchActive]}>
                       <LinearGradient
@@ -370,73 +490,131 @@ export default function SettingsScreen({ onLogout }) {
                         {isActive && <Text style={styles.themeSwatchCheck}>✓</Text>}
                       </LinearGradient>
                     </View>
-                    <Text style={styles.themeSwatchLabel} numberOfLines={1}>{t(`theme.${themeDef.id}`)}</Text>
+                    <Text style={[styles.themeSwatchLabel, isActive && styles.themeSwatchLabelActive]} numberOfLines={1}>{t(`theme.${themeDef.id}`)}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
           </View>
 
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1 }}>
+          <View style={styles.languageBlock}>
+            <View>
               <Text style={styles.toggleLabel}>{t('settings.appearance.languageLabel')}</Text>
               <Text style={styles.toggleHint}>{t('settings.appearance.languageHint')}</Text>
             </View>
-            <View style={styles.langRow}>
-              <TouchableOpacity style={[styles.langChip, language === 'es' && styles.langChipActive]} onPress={() => setLanguage('es')}>
-                <Text style={[styles.langChipText, language === 'es' && styles.langChipTextActive]}>ES</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.langChip, language === 'en' && styles.langChipActive]} onPress={() => setLanguage('en')}>
-                <Text style={[styles.langChipText, language === 'en' && styles.langChipTextActive]}>EN</Text>
-              </TouchableOpacity>
+            <View style={styles.languageSelector}>
+              {['es', 'en'].map(lang => {
+                const isActive = language === lang;
+                return (
+                  <TouchableOpacity
+                    key={lang}
+                    style={[styles.languageOption, isActive && styles.languageOptionActive]}
+                    onPress={() => setLanguage(lang)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <Text style={[styles.languageCode, isActive && styles.langChipTextActive]}>{lang.toUpperCase()}</Text>
+                    <Text style={[styles.languageName, isActive && styles.langChipTextActive]}>{t(`settings.language.${lang}`)}</Text>
+                    {isActive && <Icon name="checkmark-circle" size={17} color="#1ed760" />}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
-        </Section>
+        </Section>}
 
         {/* Descargas offline */}
-        <Section c={colors} styles={styles} onLayout={captureY('downloads')} title={t('settings.downloads.title')} subtitle={t('settings.downloads.subtitle')}>
-          {folderPlaylists.length === 0 && playlists.length === 0 && (
-            <Text style={styles.emptyHint}>{t('settings.downloads.none')}</Text>
+        {activeSection === 'downloads' && <Section c={colors} styles={styles} title={t('settings.downloads.title')} subtitle={t('settings.downloads.subtitle')}>
+          <View style={styles.downloadStorageCard}>
+            <View style={styles.downloadStorageHeader}>
+              <StorageGlyph styles={styles} />
+              <View style={styles.downloadStorageMeta}>
+                <Text style={styles.downloadStorageLabel}>{t('settings.downloads.storageUsed')}</Text>
+                <Text style={styles.downloadStorageSize}>{cacheSizeLabel()}</Text>
+              </View>
+            </View>
+            <View style={styles.downloadStorageStats}>
+              <View style={styles.downloadStorageStat}>
+                <Text style={styles.downloadStorageStatValue}>{totalOfflineCount}</Text>
+                <Text style={styles.downloadStorageStatLabel}>{t('settings.downloads.savedCollections')}</Text>
+              </View>
+              <View style={styles.downloadStorageDivider} />
+              <View style={styles.downloadStorageStat}>
+                <Text style={styles.downloadStorageStatValue}>{downloadedSongIds.length}</Text>
+                <Text style={styles.downloadStorageStatLabel}>{t('settings.downloads.savedSongs')}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.clearDownloadsButton, (cacheBytes === 0 || clearing) && styles.disabledBtn]}
+              onPress={handleClearCache}
+              disabled={cacheBytes === 0 || clearing}
+              accessibilityRole="button"
+            >
+              <Icon name="trash-outline" size={17} color={cacheBytes === 0 ? colors.textDim : '#ff6666'} />
+              <Text style={[styles.clearDownloadsText, cacheBytes === 0 && styles.clearDownloadsTextDisabled]}>
+                {clearing ? t('settings.downloads.clearing') : confirmClear ? t('settings.downloads.confirmClear') : t('settings.downloads.clearAll')}
+              </Text>
+            </TouchableOpacity>
+            {confirmClear && (
+              <TouchableOpacity style={styles.cancelClearButton} onPress={() => setConfirmClear(false)}>
+                <Text style={styles.linkText}>{t('settings.downloads.cancelClear')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {offlinePlaylists.length > 0 && (
+            <>
+              <Text style={styles.downloadGroupTitle}>{t('settings.downloads.savedTitle')}</Text>
+              {offlinePlaylists.map(pl => (
+                <DownloadedPlaylistRow
+                  key={`offline-${pl.id}`}
+                  playlist={pl}
+                  onRemove={() => removeOfflinePlaylist(pl.id)}
+                  SERVER_URL={SERVER_URL}
+                  styles={styles}
+                  colors={colors}
+                  t={t}
+                />
+              ))}
+            </>
           )}
-          {folderPlaylists.map(pl => (
+
+          {(folderPlaylists.some(pl => !offlinePlaylists.some(saved => saved.id === pl.id))
+            || playlists.some(pl => !offlinePlaylists.some(saved => saved.id === pl.id))) && (
+            <Text style={styles.downloadGroupTitle}>{t('settings.downloads.availableTitle')}</Text>
+          )}
+          {folderPlaylists.length === 0 && playlists.length === 0 && (
+            <View style={styles.downloadEmpty}>
+              <Icon name="download-outline" size={28} color={colors.textDim} />
+              <Text style={styles.emptyHint}>{t('settings.downloads.none')}</Text>
+            </View>
+          )}
+          {folderPlaylists.some(pl => !offlinePlaylists.some(saved => saved.id === pl.id)) && <Text style={styles.downloadGroupTitle}>{t('settings.downloads.folders')}</Text>}
+          {folderPlaylists.filter(pl => !offlinePlaylists.some(saved => saved.id === pl.id)).map(pl => (
             <DownloadableRow key={`f-${pl.id}`} playlist={pl} type="folder" allSongs={songs} isOnline={isOnline} SERVER_URL={SERVER_URL} styles={styles} colors={colors} />
           ))}
-          {playlists.map(pl => (
+          {playlists.some(pl => !offlinePlaylists.some(saved => saved.id === pl.id)) && <Text style={styles.downloadGroupTitle}>{t('settings.downloads.playlists')}</Text>}
+          {playlists.filter(pl => !offlinePlaylists.some(saved => saved.id === pl.id)).map(pl => (
             <DownloadableRow key={`m-${pl.id}`} playlist={pl} type="manual" allSongs={songs} isOnline={isOnline} SERVER_URL={SERVER_URL} styles={styles} colors={colors} />
           ))}
-        </Section>
-
-        {/* Almacenamiento */}
-        <Section c={colors} styles={styles} onLayout={captureY('storage')} title={t('settings.storage.title')} subtitle={t('settings.storage.subtitle')}>
-          <View style={styles.storageRow}>
-            <View>
-              <Text style={styles.storageSize}>{cacheSizeLabel()}</Text>
-              <Text style={styles.toggleHint}>
-                {totalOfflineCount > 0 ? t('settings.storage.collectionsCount', totalOfflineCount) : t('settings.storage.none')}
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={[styles.dangerBtnLg, cacheBytes === 0 && styles.disabledBtn]}
-            onPress={handleClearCache}
-            disabled={cacheBytes === 0 || clearing}
-          >
-            <Text style={styles.dangerBtnLgText}>
-              {clearing ? t('settings.storage.clearing') : confirmClear ? t('settings.storage.confirm') : t('settings.storage.clear')}
-            </Text>
-          </TouchableOpacity>
-          {confirmClear && (
-            <TouchableOpacity onPress={() => setConfirmClear(false)}>
-              <Text style={styles.linkText}>{t('settings.storage.cancel')}</Text>
-            </TouchableOpacity>
-          )}
-        </Section>
+        </Section>}
 
         {/* Créditos */}
-        <Section c={colors} styles={styles} onLayout={captureY('credits')} title={t('settings.credits.title')}>
-          <Text style={styles.creditsText}>
-            {t('settings.credits.text')} <Text style={{ color: colors.text, fontWeight: '700' }}>Rexy</Text>.
-          </Text>
+        {activeSection === 'credits' && <View style={styles.creditsPage}>
+          <View style={styles.creditsHero}>
+            <Image source={require('../../assets/icon.png')} style={styles.creditsLogo} resizeMode="cover" />
+            <Text style={styles.creditsHeadline}>{t('settings.credits.headline')}</Text>
+            <Text style={styles.creditsText}>{t('settings.credits.text')}</Text>
+          </View>
+          <View style={styles.creditsByline}>
+            <Text style={styles.creditsEyebrow}>{t('settings.credits.madeBy')}</Text>
+            <Text style={styles.creditsAuthor}>Rexy</Text>
+            <Text style={styles.creditsText}>{t('settings.credits.authorText')}</Text>
+          </View>
+          <View style={styles.creditsByline}>
+            <Text style={styles.creditsEyebrow}>{t('settings.credits.project')}</Text>
+            <Text style={styles.creditsText}>{t('settings.credits.projectText')}</Text>
+          </View>
           <View style={styles.creditsLinks}>
             <TouchableOpacity style={styles.linkChip} onPress={() => Linking.openURL('https://github.com/Rexyto/yfitops')}>
               <Text style={styles.linkChipText}>{t('settings.credits.source')}</Text>
@@ -445,41 +623,49 @@ export default function SettingsScreen({ onLogout }) {
               <Text style={styles.linkChipText}>{t('settings.credits.author')}</Text>
             </TouchableOpacity>
           </View>
-        </Section>
+          <Text style={styles.creditsVersion}>YFitops · v{appVersion}</Text>
+        </View>}
 
-        {/* Versión */}
-        <Section c={colors} styles={styles} onLayout={captureY('version')} title={t('settings.version.title')}>
-          <Text style={styles.versionTag}>YFitops v{appVersion}</Text>
-        </Section>
-
-        <TouchableOpacity style={styles.logoutRow} onPress={onLogout}>
-          <Icon name="log-out-outline" size={18} color="#ff4444" />
-          <Text style={styles.logoutText}>{t('settings.logout')}</Text>
-        </TouchableOpacity>
       </ScrollView>
+      )}
     </View>
   );
 }
 
 const makeStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg0 },
-  header: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 8 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: c.text, letterSpacing: -0.5 },
-  headerSub: { fontSize: 12, color: c.textDim, marginTop: 4, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 18 },
+  headerText: { flex: 1, minWidth: 0 },
+  backHeader: { width: 42, height: 42, borderRadius: 21, backgroundColor: c.bg3, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  headerTitle: { fontSize: 32, fontWeight: '800', color: c.text, letterSpacing: -0.6 },
+  headerSub: { fontSize: 13, color: c.textDim, marginTop: 4, fontWeight: '500' },
+  menuScroll: { flex: 1 },
+  menuContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 28 },
+  menuSection: { marginBottom: 22 },
+  menuSectionTitle: { color: c.textDim, fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginHorizontal: 4, marginBottom: 4 },
+  menuGroup: { paddingHorizontal: 4 },
+  menuItem: { minHeight: 66, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: c.border, gap: 12 },
+  menuItemLast: { borderBottomWidth: 0 },
+  menuIcon: { width: 28, alignItems: 'center', justifyContent: 'center' },
+  menuEmoji: { fontSize: 19 },
+  menuCopy: { flex: 1, minWidth: 0, paddingVertical: 10 },
+  menuLabel: { color: c.text, fontSize: 15, fontWeight: '600' },
+  menuHint: { color: c.textDim, fontSize: 11, marginTop: 3 },
+  appInfo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 20, marginBottom: 8 },
+  appLogo: { width: 64, height: 42, borderRadius: 8, backgroundColor: '#080b18' },
+  appInfoName: { color: c.textSecondary, fontSize: 13, fontWeight: '700' },
+  appInfoVersion: { color: c.textDim, fontSize: 11, marginTop: 2 },
 
-  offlineNotice: { marginHorizontal: 20, marginTop: 8, padding: 12, backgroundColor: '#ff555518', borderWidth: 1, borderColor: '#ff555540', borderRadius: 10 },
+  offlineNotice: { marginHorizontal: 12, marginTop: 8, padding: 12, backgroundColor: '#ff555518', borderWidth: 1, borderColor: '#ff555540', borderRadius: 12 },
   offlineNoticeText: { color: '#ff8080', fontSize: 12.5, fontWeight: '600' },
 
-  indexRow: { marginTop: 14, marginBottom: 6, flexGrow: 0 },
-  indexChip: { backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  indexChipText: { color: c.textSecondary, fontSize: 12.5, fontWeight: '600' },
+  section: { marginHorizontal: 16, marginBottom: 0, marginTop: 4, backgroundColor: c.bg2, borderWidth: 1, borderColor: c.border, borderRadius: 18, padding: 18 },
+  sectionTitle: { color: c.text, fontSize: 16, fontWeight: '800' },
+  sectionSubtitle: { color: c.textDim, fontSize: 12, lineHeight: 17, marginTop: 5 },
+  sectionBody: { marginTop: 12, gap: 12 },
+  sectionBodyFirst: { marginTop: 0 },
 
-  section: { margin: 16, marginBottom: 0, marginTop: 14, backgroundColor: c.bg2, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 18 },
-  sectionTitle: { color: c.text, fontSize: 15, fontWeight: '800' },
-  sectionSubtitle: { color: c.textDim, fontSize: 12, marginTop: 4 },
-  sectionBody: { marginTop: 14, gap: 12 },
-
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatarWrap: { width: 64, height: 64, borderRadius: 32, overflow: 'hidden', borderWidth: 2, borderColor: '#1ed76055' },
   avatarImg: { width: '100%', height: '100%' },
   avatarEmpty: { width: '100%', height: '100%', backgroundColor: c.bg3, justifyContent: 'center', alignItems: 'center' },
@@ -496,62 +682,99 @@ const makeStyles = (c) => StyleSheet.create({
   toggleHint: { color: c.textDim, fontSize: 12, marginTop: 2 },
 
   themeBlock: { gap: 10 },
-  themePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, paddingTop: 6 },
-  themeSwatchBtn: { alignItems: 'center', gap: 6, width: 56 },
-  themeSwatchWrap: { padding: 2, borderRadius: 24, borderWidth: 2, borderColor: 'transparent' },
+  themePicker: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 8, paddingTop: 4 },
+  themeSwatchBtn: { width: '31%', minHeight: 82, alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 12, paddingVertical: 9 },
+  themeSwatchBtnLastRowStart: { marginLeft: '17%' },
+  themeSwatchBtnActive: { backgroundColor: '#1ed76012', borderColor: '#1ed76080' },
+  themeSwatchWrap: { padding: 2, borderRadius: 22, borderWidth: 2, borderColor: 'transparent' },
   themeSwatchActive: { borderColor: '#1ed760' },
-  themeSwatch: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: c.borderStrong },
+  themeSwatch: { width: 34, height: 34, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: c.borderStrong },
   themeSwatchCheck: { color: '#1ed760', fontSize: 15, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   themeSwatchLabel: { color: c.textDim, fontSize: 10, fontWeight: '700', textAlign: 'center' },
+  themeSwatchLabelActive: { color: '#1ed760' },
 
-  langRow: { flexDirection: 'row', gap: 6 },
-  langChip: { backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  langChipActive: { backgroundColor: '#1ed76025', borderColor: '#1ed76060' },
-  langChipText: { color: c.textMuted, fontWeight: '700', fontSize: 12 },
+  languageBlock: { gap: 12, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 14 },
+  languageSelector: { gap: 8 },
+  languageOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 10, paddingHorizontal: 12 },
+  languageOptionActive: { backgroundColor: '#1ed76015', borderColor: '#1ed76060' },
+  languageCode: { width: 30, color: c.textMuted, fontWeight: '800', fontSize: 12 },
+  languageName: { flex: 1, color: c.textMuted, fontWeight: '600', fontSize: 13 },
   langChipTextActive: { color: '#1ed760' },
 
   emptyHint: { color: c.textDim, fontSize: 13 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border, gap: 10 },
+  downloadGroupTitle: { color: c.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginTop: 8, marginBottom: 2 },
+  downloadEmpty: { alignItems: 'center', gap: 10, paddingVertical: 28 },
+  downloadStorageCard: { backgroundColor: c.bg2, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 16, padding: 15, gap: 14 },
+  downloadStorageHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  downloadStorageIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#1ed76012', borderWidth: 1, borderColor: '#1ed76030', alignItems: 'center', justifyContent: 'center' },
+  storageDrive: { width: 25, height: 20, borderRadius: 6, borderWidth: 1.8, borderColor: '#1ed760', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 4 },
+  storageDriveSlot: { position: 'absolute', top: 5, width: 14, height: 1.5, borderRadius: 1, backgroundColor: '#1ed76090' },
+  storageDriveIndicator: { width: 3.5, height: 3.5, borderRadius: 2, backgroundColor: '#1ed760', alignSelf: 'flex-end', marginRight: 4 },
+  downloadStorageMeta: { flex: 1 },
+  downloadStorageLabel: { color: c.textDim, fontSize: 12, fontWeight: '600' },
+  downloadStorageSize: { color: c.text, fontSize: 23, fontWeight: '800', marginTop: 2 },
+  downloadStorageStats: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.bg3, borderRadius: 11, paddingVertical: 12 },
+  downloadStorageStat: { flex: 1, alignItems: 'center', gap: 3 },
+  downloadStorageStatValue: { color: c.text, fontSize: 16, fontWeight: '800' },
+  downloadStorageStatLabel: { color: c.textDim, fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  downloadStorageDivider: { width: 1, height: 29, backgroundColor: c.borderStrong },
+  clearDownloadsButton: { minHeight: 42, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: '#ff555510', borderWidth: 1, borderColor: '#ff555540', borderRadius: 10 },
+  clearDownloadsText: { color: '#ff6666', fontSize: 12, fontWeight: '700' },
+  clearDownloadsTextDisabled: { color: c.textDim },
+  cancelClearButton: { paddingVertical: 4 },
+  downloadedCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 14, padding: 11 },
+  downloadedCardMeta: { flex: 1, minWidth: 0 },
+  downloadedCardSub: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
+  downloadedRemoveButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ff555510', alignItems: 'center', justifyContent: 'center' },
+  downloadCard: { backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 14, padding: 12, gap: 12 },
+  downloadCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  downloadArtwork: { width: 54, height: 54, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  downloadArtworkImage: { width: '100%', height: '100%' },
   rowMeta: { flex: 1, minWidth: 0 },
-  rowName: { color: c.textSecondary, fontSize: 14, fontWeight: '700' },
-  rowSub: { color: c.textDim, fontSize: 12, marginTop: 2 },
-  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  downloadedTag: { color: '#1ed760', fontSize: 12, fontWeight: '700' },
+  rowName: { color: c.textSecondary, fontSize: 14, fontWeight: '700', lineHeight: 19 },
+  rowSub: { color: c.textDim, fontSize: 12, marginTop: 3 },
+  downloadStatus: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.bg4, borderRadius: 9, paddingHorizontal: 12 },
+  downloadStatusIcon: { alignItems: 'center', justifyContent: 'center' },
   progressTag: { color: c.textDim, fontSize: 12, fontWeight: '700' },
-
-  downloadBtn: { borderWidth: 1, borderColor: '#1ed76055', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  downloadedStatus: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  downloadedTag: { color: '#1ed760', fontSize: 12, fontWeight: '700' },
+  downloadActions: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 42, backgroundColor: c.bg4, borderRadius: 9, paddingHorizontal: 12 },
+  downloadCardButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1ed760', borderRadius: 9, paddingHorizontal: 14 },
+  downloadCardButtonText: { color: '#000', fontSize: 13, fontWeight: '800' },
+  downloadCardButtonTextDisabled: { color: c.textDim },
+  downloadRemoveBtn: { borderWidth: 1, borderColor: '#ff555540', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 6 },
   downloadBtnDisabled: { opacity: 0.4 },
-  downloadBtnText: { color: '#1ed760', fontSize: 12, fontWeight: '700' },
-  dangerBtn: { borderWidth: 1, borderColor: '#ff555540', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
   dangerBtnText: { color: '#ff5555', fontSize: 12, fontWeight: '700' },
 
-  storageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  storageSize: { color: c.text, fontSize: 22, fontWeight: '800' },
-  dangerBtnLg: { backgroundColor: '#ff555515', borderWidth: 1, borderColor: '#ff555550', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  dangerBtnLgText: { color: '#ff5555', fontSize: 13, fontWeight: '700' },
   disabledBtn: { opacity: 0.4 },
   linkText: { color: c.textDim, fontSize: 12, textDecorationLine: 'underline', textAlign: 'center' },
 
+  creditsPage: { marginHorizontal: 16, gap: 12, paddingBottom: 24 },
+  creditsHero: { alignItems: 'center', backgroundColor: c.bg2, borderWidth: 1, borderColor: c.border, borderRadius: 20, padding: 22 },
+  creditsLogo: { width: '100%', height: 110, borderRadius: 14, backgroundColor: '#080b18', marginBottom: 18 },
+  creditsHeadline: { color: c.text, fontSize: 21, fontWeight: '800', textAlign: 'center', marginBottom: 8 },
+  creditsByline: { backgroundColor: c.bg2, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 18, gap: 6 },
+  creditsEyebrow: { color: '#1ed760', fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
+  creditsAuthor: { color: c.text, fontSize: 19, fontWeight: '800' },
   creditsText: { color: c.textSecondary, fontSize: 14, lineHeight: 20 },
   creditsLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   linkChip: { backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9 },
   linkChipText: { color: c.textSecondary, fontSize: 13, fontWeight: '600' },
+  creditsVersion: { color: c.textDim, fontSize: 11, textAlign: 'center', marginTop: 8 },
 
-  versionTag: { color: c.textMuted, fontSize: 13, fontWeight: '600', backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, alignSelf: 'flex-start' },
-
-  logoutRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 20, marginBottom: 20 },
+  logoutRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 12, marginTop: 16, marginBottom: 24, minHeight: 48, backgroundColor: '#ff555510', borderWidth: 1, borderColor: '#ff555530', borderRadius: 12 },
   logoutText: { color: '#ff4444', fontWeight: '700', fontSize: 14 },
 
   // Estadísticas
-  sectionSubtitle: { color: c.textDim, fontSize: 12, marginTop: -8, marginBottom: 14 },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  profilePrivacy: { color: c.textDim, fontSize: 11, lineHeight: 15, marginTop: 10 },
+  statsGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   statCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, flexGrow: 1, flexBasis: '30%',
-    backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 12, padding: 12,
+    flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', minHeight: 94,
+    backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 12, paddingHorizontal: 6, paddingVertical: 10,
   },
-  statIcon: { fontSize: 20 },
-  statValue: { color: c.text, fontSize: 17, fontWeight: '800' },
-  statLabel: { color: c.textDim, fontSize: 10.5, fontWeight: '600', marginTop: 1 },
+  statIcon: { fontSize: 17, marginBottom: 4 },
+  statValue: { color: c.text, fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  statLabel: { color: c.textDim, fontSize: 9.5, fontWeight: '600', marginTop: 3, textAlign: 'center' },
 
   highlightGrid: { gap: 10, marginBottom: 4 },
   highlightCard: { backgroundColor: c.bg3, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 12, padding: 14, position: 'relative' },

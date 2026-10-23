@@ -1,11 +1,41 @@
-import React, { createContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import * as Notifications from 'expo-notifications';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import TrackPlayer, {
+  AppKilledPlaybackBehavior,
+  Capability,
+  Event,
+  RepeatMode,
+  State as TrackPlayerState,
+} from 'react-native-track-player';
 import { useSettings } from './SettingsContext';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 export const MusicContext = createContext();
+let playbackProgress = { position: 0, duration: 0 };
+const playbackProgressListeners = new Set();
+
+function subscribeToPlaybackProgress(listener) {
+  playbackProgressListeners.add(listener);
+  return () => playbackProgressListeners.delete(listener);
+}
+
+function getPlaybackProgress() {
+  return playbackProgress;
+}
+
+function updatePlaybackProgress(update) {
+  const next = { ...playbackProgress, ...update };
+  if (next.position === playbackProgress.position && next.duration === playbackProgress.duration) return;
+  playbackProgress = next;
+  playbackProgressListeners.forEach(listener => listener());
+}
+
+export function usePlaybackProgress() {
+  return useSyncExternalStore(subscribeToPlaybackProgress, getPlaybackProgress, getPlaybackProgress);
+}
 
 const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || 'https://yfitops.duckdns.org';
 
@@ -18,6 +48,46 @@ const CACHE_SONGS = 'yfitops_cache_songs';
 const CACHE_PLAYLISTS = 'yfitops_cache_playlists';
 const CACHE_FOLDER_PLAYLISTS = 'yfitops_cache_folder_playlists';
 const CACHE_FAVORITES = 'yfitops_cache_favorites';
+
+let trackPlayerReadyPromise;
+
+async function ensureTrackPlayer() {
+  if (!trackPlayerReadyPromise) {
+    trackPlayerReadyPromise = (async () => {
+      await TrackPlayer.setupPlayer({ autoHandleInterruptions: true });
+      await TrackPlayer.updateOptions({
+        android: {
+          appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
+          alwaysPauseOnInterruption: true,
+        },
+        capabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+          Capability.SeekTo,
+        ],
+        notificationCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+          Capability.SeekTo,
+        ],
+        compactCapabilities: [
+          Capability.SkipToPrevious,
+          Capability.Play,
+          Capability.SkipToNext,
+        ],
+        progressUpdateEventInterval: 0.5,
+      });
+    })().catch((error) => {
+      trackPlayerReadyPromise = null;
+      throw error;
+    });
+  }
+  await trackPlayerReadyPromise;
+}
 
 async function readCache(key, fallback) {
   try {
@@ -42,23 +112,19 @@ let notificationReady = false;
 let pendingNotification = null;
 
 async function setupNotifications() {
+  if (Platform.OS === 'android') {
+    try {
+      await Notifications.requestPermissionsAsync();
+      await Notifications.dismissNotificationAsync('music-player');
+    } catch (e) {
+      console.log('notifications:', e.message);
+    }
+    return;
+  }
+
   try {
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== 'granted') return;
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('music-channel', {
-        name: 'Reproducción de música',
-        importance: Notifications.AndroidImportance.DEFAULT,
-        sound: null, vibrationPattern: null, showBadge: false,
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        enableLights: false, enableVibrate: false,
-      });
-      await Notifications.setNotificationCategoryAsync('music-controls', [
-        { identifier: 'prev',   buttonTitle: '⏮ Anterior',   options: { opensAppToForeground: false } },
-        { identifier: 'toggle', buttonTitle: '⯈ Play/Pausa', options: { opensAppToForeground: false } },
-        { identifier: 'next',   buttonTitle: '⏭ Siguiente',  options: { opensAppToForeground: false } },
-      ]);
-    }
     notificationReady = true;
     if (pendingNotification) {
       const { song, playing } = pendingNotification;
@@ -69,6 +135,7 @@ async function setupNotifications() {
 }
 
 async function updateNotification(song, playing) {
+  if (Platform.OS === 'android') return;
   if (!song) return;
   if (!notificationReady) { pendingNotification = { song, playing }; return; }
   try {
@@ -88,6 +155,7 @@ async function updateNotification(song, playing) {
 
 async function dismissNotification() {
   pendingNotification = null;
+  if (Platform.OS === 'android') return;
   try { await Notifications.dismissAllNotificationsAsync(); } catch {}
 }
 
@@ -96,11 +164,11 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   const safeLocalPath = async (songId) => {
     try { return getLocalSongPath ? await getLocalSongPath(songId) : null; } catch { return null; }
   };
+  const setPosition = value => updatePlaybackProgress({ position: value });
+  const setDuration = value => updatePlaybackProgress({ duration: value });
   const [songs, setSongs]                     = useState([]);
   const [currentSong, setCurrentSong]         = useState(null);
   const [isPlaying, setIsPlaying]             = useState(false);
-  const [position, setPosition]               = useState(0);
-  const [duration, setDuration]               = useState(0);
   const [favorites, setFavorites]             = useState([]);
   const [playlists, setPlaylists]             = useState([]);
   const [isLooping, setIsLooping]             = useState(false);
@@ -110,6 +178,9 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   const [currentPlaylist, setCurrentPlaylist] = useState([]);
   const [activeListeners, setActiveListeners] = useState(0);
   const [queue, setQueue]                     = useState([]); // Cola de reproducción, independiente de currentPlaylist
+
+  const songsRef = useRef(songs);
+  const folderPlaylistsRef = useRef(folderPlaylists);
 
   // ── Logros y estadísticas (datos reales del servidor) ──────────
   const [achievements, setAchievements]               = useState([]);
@@ -128,6 +199,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   const currentPlaylistRef = useRef([]);
   const isLoopingRef       = useRef(false);
   const currentSongRef     = useRef(null);
+  const currentNativeTrackIdRef = useRef(null);
   const isPlayingRef       = useRef(false);
   const positionRef        = useRef(0);
   const playStartTimeRef   = useRef(null);
@@ -135,6 +207,9 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   const endTimerRef        = useRef(null);
   const advancedRef        = useRef(false);
   const queueRef           = useRef([]);
+  const nativeQueueReadyRef = useRef(null);
+  const previousPressAtRef = useRef(0);
+  const playbackStartingRef = useRef(false);
 
   // Qué playlist/colección está sonando ahora mismo (si la hay), para que
   // el servidor pueda contar reproducciones por playlist (estadística de
@@ -149,8 +224,9 @@ export const MusicProvider = ({ children, token, onLogout }) => {
 
   useEffect(() => { isLoopingRef.current = isLooping; }, [isLooping]);
   useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
+  useEffect(() => { songsRef.current = songs; }, [songs]);
+  useEffect(() => { folderPlaylistsRef.current = folderPlaylists; }, [folderPlaylists]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
-  useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
 
   const tokenRef = useRef(token);
@@ -221,6 +297,12 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     isPlayingRef.current = playingNow;
     setIsPlaying(playingNow);
 
+    if (Platform.OS === 'android') {
+      if (playingNow) playStartTimeRef.current = Date.now();
+      updateNotification(currentSongRef.current, playingNow);
+      return;
+    }
+
     if (playingNow) {
       playStartTimeRef.current = Date.now();
       // Reprograma el temporizador de seguridad según la posición real,
@@ -251,7 +333,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
         old.unloadAsync().catch(() => {});
       }
       const { sound: pre } = await Audio.Sound.createAsync(
-        { uri: (await safeLocalPath(nextSong.id)) || `${SERVER_URL}${nextSong.url}` },
+        { uri: (await safeLocalPath(nextSong.id)) || resolveMediaUrl(SERVER_URL, nextSong.url) },
         { shouldPlay: false, progressUpdateIntervalMillis: 0 },
         null, false
       );
@@ -385,12 +467,123 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   useEffect(() => {
     setupNotifications();
 
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const sub = Platform.OS === 'android'
+      ? null
+      : Notifications.addNotificationResponseReceivedListener((response) => {
       const action = response.actionIdentifier;
       if (action === 'prev')        playPrevious();
       else if (action === 'next')   playNext();
       else if (action === 'toggle') { if (isPlayingRef.current) pauseSong(); else resumeSong(); }
     });
+
+    let trackPlayerSubscriptions = [];
+    if (Platform.OS === 'android') {
+      trackPlayerSubscriptions = [
+        TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async ({ track, index }) => {
+          if (!track) return;
+          const song = [...songsRef.current, ...folderPlaylistsRef.current.flatMap(playlist => playlist.songs || [])]
+            .find(item => String(item.id) === String(track.appSong.id)) || track.appSong;
+          if (!song) return;
+
+          const changedTrack = currentNativeTrackIdRef.current !== track.id;
+          if (changedTrack) {
+            flushPlayTime(currentSongRef.current?.id);
+            currentNativeTrackIdRef.current = track.id;
+            playStartTimeRef.current = Date.now();
+            positionRef.current = 0;
+            setPosition(0);
+          }
+
+          currentSongRef.current = song;
+          setCurrentSong(song);
+          if (
+            song.title !== track.appSong.title
+            || song.artist !== track.appSong.artist
+            || song.album !== track.appSong.album
+            || song.coverUrl !== track.appSong.coverUrl
+          ) {
+            updateNativeMetadata(song).catch(error => {
+              console.error('Could not refresh active track metadata:', error);
+            });
+          }
+          if (Number.isFinite(track.duration)) {
+            durationRef.current = track.duration * 1000;
+            setDuration(durationRef.current);
+          }
+          const playlistIndex = currentPlaylistRef.current.findIndex(item =>
+            String(item.id) === String(song.id)
+          );
+          if (playlistIndex >= 0) {
+            currentIndexRef.current = playlistIndex;
+            setCurrentIndex(playlistIndex);
+          }
+
+          try {
+            const [nativeQueue, activeIndex] = await Promise.all([
+              TrackPlayer.getQueue(),
+              TrackPlayer.getActiveTrackIndex(),
+            ]);
+            const upcomingSongs = nativeQueue
+              .slice((activeIndex ?? index ?? 0) + 1)
+              .filter(item => item.queueEntryId)
+              .map(item => item.appSong)
+              .filter(Boolean);
+            queueRef.current = upcomingSongs;
+            setQueue(upcomingSongs);
+          } catch (error) {
+            console.error('Could not synchronize the playback queue:', error);
+          }
+
+          if (changedTrack) {
+            fetch(`${SERVER_URL}/api/heartbeat`, {
+              method: 'POST', headers: authHeaders(),
+              body: JSON.stringify({
+                songId: song.id, isPlaying: true, elapsedMs: 0,
+                playlistId: currentPlaylistContextRef.current?.id || null,
+                playlistType: currentPlaylistContextRef.current?.type || null,
+              }),
+            }).then(r => r.json()).then(handleHeartbeatExtras).catch(() => {});
+          }
+        }),
+        TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
+          if (state === TrackPlayerState.Playing) {
+            playbackStartingRef.current = false;
+            syncPlayingState(true);
+          } else if (
+            state === TrackPlayerState.Paused
+            && !playbackStartingRef.current
+          ) {
+            syncPlayingState(false);
+          } else if (
+            state === TrackPlayerState.Error
+            || state === TrackPlayerState.Stopped
+            || state === TrackPlayerState.Ended
+          ) {
+            playbackStartingRef.current = false;
+            syncPlayingState(false);
+          }
+        }),
+        TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, ({ position: currentPosition, duration: trackDuration }) => {
+          positionRef.current = currentPosition * 1000;
+          setPosition(positionRef.current);
+          if (trackDuration > 0) {
+            durationRef.current = trackDuration * 1000;
+            setDuration(durationRef.current);
+          }
+        }),
+        TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+          flushPlayTime(currentSongRef.current?.id);
+          playStartTimeRef.current = null;
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+          setPosition(0);
+        }),
+      ];
+
+      ensureTrackPlayer().catch(error => {
+        console.error('Could not initialize the Android music player:', error);
+      });
+    }
 
     // Primero pintamos lo último que sabíamos (funciona sin conexión),
     // y luego intentamos refrescar desde el servidor si hay red.
@@ -411,8 +604,9 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     fetchAchievements(); fetchStats();
 
     const syncInterval = setInterval(() => {
+      if (AppState.currentState !== 'active') return;
       fetchSongs(); loadPlaylists(); fetchFolderPlaylists();
-    }, 5000);
+    }, 30000);
 
     const heartbeatInterval = setInterval(async () => {
       try {
@@ -440,7 +634,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     // a tiempo (o nada) — este intervalo sigue corriendo igualmente y coge
     // esos casos, en vez de dejar la canción "colgada" hasta que alguien
     // desbloquee el móvil.
-    const watchdogInterval = setInterval(async () => {
+    const watchdogInterval = Platform.OS === 'android' ? null : setInterval(async () => {
       if (!sound.current || advancedRef.current) return;
       try {
         const status = await sound.current.getStatusAsync();
@@ -450,6 +644,25 @@ export const MusicProvider = ({ children, token, onLogout }) => {
         if (reachedEnd) doAdvance();
       } catch {}
     }, 10000);
+
+    let progressPollInFlight = false;
+    const nativeProgressInterval = Platform.OS === 'android' ? setInterval(async () => {
+      if (AppState.currentState !== 'active' || !currentSongRef.current || progressPollInFlight) return;
+      progressPollInFlight = true;
+      try {
+        const progress = await TrackPlayer.getProgress();
+        positionRef.current = progress.position * 1000;
+        setPosition(positionRef.current);
+        if (progress.duration > 0) {
+          durationRef.current = progress.duration * 1000;
+          setDuration(durationRef.current);
+        }
+      } catch (error) {
+        console.error('Could not refresh Android playback progress:', error);
+      } finally {
+        progressPollInFlight = false;
+      }
+    }, 500) : null;
 
     // Al minimizar o volver a abrir la app, resincroniza la notificación
     // con el estado real — antes esto no pasaba nunca de forma explícita,
@@ -471,7 +684,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
       // nativo ya haya terminado. Al volver, comprobamos el estado real del
       // sonido directamente y forzamos el avance si hace falta, en vez de
       // fiarnos de que el aviso nos llegara mientras estaba en segundo plano.
-      if (nextState === 'active' && sound.current) {
+      if (Platform.OS !== 'android' && nextState === 'active' && sound.current) {
         try {
           const status = await sound.current.getStatusAsync();
           if (status.isLoaded) {
@@ -486,25 +699,52 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     });
 
     return () => {
-      sub.remove();
+      sub?.remove();
+      trackPlayerSubscriptions.forEach(subscription => subscription.remove());
       appStateSub.remove();
       clearInterval(syncInterval);
       clearInterval(heartbeatInterval);
-      clearInterval(watchdogInterval);
+      if (watchdogInterval) clearInterval(watchdogInterval);
+      if (nativeProgressInterval) clearInterval(nativeProgressInterval);
       if (endTimerRef.current) clearTimeout(endTimerRef.current);
       flushPlayTime(currentSongRef.current?.id);
       sound.current?.unloadAsync().catch(() => {});
       nextSound.current?.unloadAsync().catch(() => {});
+      if (Platform.OS === 'android') {
+        TrackPlayer.reset().catch(error => {
+          console.error('Could not stop the Android music player:', error);
+        });
+      }
       dismissNotification();
     };
   }, []);
+
+  const refreshActiveSongMetadata = (librarySongs) => {
+    const previousSong = currentSongRef.current;
+    if (!previousSong) return;
+    const activeSong = librarySongs.find(song => String(song.id) === String(previousSong.id));
+    if (!activeSong || (
+      activeSong.title === previousSong.title
+      && activeSong.artist === previousSong.artist
+      && activeSong.album === previousSong.album
+      && activeSong.coverUrl === previousSong.coverUrl
+    )) return;
+    currentSongRef.current = activeSong;
+    setCurrentSong(activeSong);
+    updateNativeMetadata(activeSong).catch(error => {
+      console.error('Could not refresh active track metadata:', error);
+    });
+  };
 
   const fetchSongs = async () => {
     try {
       const r = await fetch(`${SERVER_URL}/api/songs`, { headers: authHeaders() });
       const d = await r.json();
+      if (!Array.isArray(d)) return;
+      songsRef.current = d;
       setSongs(d);
       writeCache(CACHE_SONGS, d);
+      refreshActiveSongMetadata(d);
     } catch {}
   };
   const loadFavorites = async () => {
@@ -531,8 +771,10 @@ export const MusicProvider = ({ children, token, onLogout }) => {
       const r = await fetch(`${SERVER_URL}/api/folderplaylists`, { headers: authHeaders() });
       const d = await r.json();
       const arr = Array.isArray(d) ? d : [];
+      folderPlaylistsRef.current = arr;
       setFolderPlaylists(arr);
       writeCache(CACHE_FOLDER_PLAYLISTS, arr);
+      refreshActiveSongMetadata(arr.flatMap(playlist => playlist.songs || []));
     } catch {}
   };
 
@@ -591,7 +833,220 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     setRateLimitWarning(null);
   };
 
+  const makeNativeTrack = async (song, trackId, queueEntryId = null) => {
+    const artwork = resolveMediaUrl(SERVER_URL, song.coverUrl) || undefined;
+    return {
+      id: trackId,
+      url: (await safeLocalPath(song.id)) || resolveMediaUrl(SERVER_URL, song.url),
+      title: song.title || 'YFitops',
+      artist: song.artist || '',
+      album: song.album || 'YFitops',
+      duration: Number(song.duration) || undefined,
+      artwork,
+      appSong: song,
+      queueEntryId,
+    };
+  };
+
+  const updateNativeMetadata = async (song) => {
+    if (Platform.OS !== 'android') return;
+    const activeIndex = await TrackPlayer.getActiveTrackIndex();
+    if (activeIndex === undefined) return;
+    await TrackPlayer.updateMetadataForTrack(activeIndex, {
+      title: song.title || 'YFitops',
+      artist: song.artist || '',
+      album: song.album || 'YFitops',
+      artwork: resolveMediaUrl(SERVER_URL, song.coverUrl) || undefined,
+    });
+  };
+
+  const syncNativeActiveTrack = async () => {
+    const track = await TrackPlayer.getActiveTrack();
+    if (!track?.appSong) return;
+    const song = [...songsRef.current, ...folderPlaylistsRef.current.flatMap(playlist => playlist.songs || [])]
+      .find(item => String(item.id) === String(track.appSong.id)) || track.appSong;
+    const changedTrack = currentNativeTrackIdRef.current !== track.id;
+    currentNativeTrackIdRef.current = track.id;
+    currentSongRef.current = song;
+    setCurrentSong(song);
+    if (changedTrack) {
+      positionRef.current = 0;
+      setPosition(0);
+    }
+    if (Number.isFinite(track.duration) && track.duration > 0) {
+      durationRef.current = track.duration * 1000;
+      setDuration(durationRef.current);
+    }
+    const playlistIndex = currentPlaylistRef.current.findIndex(item =>
+      String(item.id) === String(song.id)
+    );
+    if (playlistIndex >= 0) {
+      currentIndexRef.current = playlistIndex;
+      setCurrentIndex(playlistIndex);
+    }
+  };
+
+  function* getNativeQueueItems(song, playlist, startIndex, queuedSongs) {
+    const now = Date.now();
+    yield { song, queueEntryId: null, id: `current-${now}` };
+
+    for (let index = 0; index < queuedSongs.length; index++) {
+      const item = queuedSongs[index];
+      yield {
+        song: item,
+        queueEntryId: item._queueEntryId,
+        id: `queued-${item._queueEntryId || `${now}-${index}`}`,
+      };
+    }
+
+    if (playlist.length < 2) return;
+    const selectedIsInPlaylist = String(playlist[startIndex]?.id) === String(song.id);
+    if (selectedIsInPlaylist) {
+      for (let index = startIndex + 1; index < playlist.length; index++) {
+        const item = playlist[index];
+        yield { song: item, queueEntryId: null, id: `playlist-${index}-${item.id}-${now}` };
+      }
+      for (let index = 0; index < startIndex; index++) {
+        const item = playlist[index];
+        yield { song: item, queueEntryId: null, id: `playlist-${index}-${item.id}-${now}` };
+      }
+      return;
+    }
+
+    const start = Math.max(-1, Math.min(startIndex, playlist.length - 1));
+    for (let index = start + 1; index < playlist.length; index++) {
+      const item = playlist[index];
+      if (String(item.id) !== String(song.id)) {
+        yield { song: item, queueEntryId: null, id: `playlist-${index}-${item.id}-${now}` };
+      }
+    }
+    for (let index = 0; index <= start; index++) {
+      const item = playlist[index];
+      if (String(item.id) !== String(song.id)) {
+        yield { song: item, queueEntryId: null, id: `playlist-${index}-${item.id}-${now}` };
+      }
+    }
+  }
+
   const playSong = async (song, playlist = [], playlistContext = null) => {
+    if (Platform.OS === 'android') {
+      previousPressAtRef.current = 0;
+      const myToken = ++loadTokenRef.current;
+      try {
+        await ensureTrackPlayer();
+        flushPlayTime(currentSongRef.current?.id);
+        advancedRef.current = false;
+        playbackStartingRef.current = true;
+        setCurrentSong(song);
+        currentSongRef.current = song;
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+        setPosition(0);
+        positionRef.current = 0;
+        const songDuration = Math.max(0, Number(song.duration) || 0) * 1000;
+        setDuration(songDuration);
+        durationRef.current = songDuration;
+
+        const playlistIndex = playlist.findIndex(item =>
+          String(item.id) === String(song.id)
+        );
+        const startIndex = playlistIndex >= 0 ? playlistIndex : currentIndexRef.current;
+        const queueItems = getNativeQueueItems(song, playlist, startIndex, queueRef.current);
+        const currentQueueItem = queueItems.next().value;
+        if (loadTokenRef.current !== myToken) return;
+
+        const currentTrack = await makeNativeTrack(
+          song,
+          currentQueueItem.id,
+          currentQueueItem.queueEntryId
+        );
+        if (loadTokenRef.current !== myToken) return;
+        await TrackPlayer.setQueue([currentTrack]);
+        await TrackPlayer.setRepeatMode(
+          isLoopingRef.current
+            ? RepeatMode.Track
+            : (playlist.length > 1 ? RepeatMode.Queue : RepeatMode.Off)
+        );
+        currentNativeTrackIdRef.current = currentTrack.id;
+        currentPlaylistContextRef.current = playlistContext;
+
+        if (playlist.length > 0) {
+          setCurrentPlaylist(playlist);
+          const index = playlistIndex >= 0 ? playlistIndex : startIndex;
+          currentIndexRef.current = index;
+          setCurrentIndex(index);
+          currentPlaylistRef.current = playlist;
+        } else {
+          currentPlaylistRef.current = [song];
+          currentIndexRef.current = 0;
+          setCurrentPlaylist([]);
+        }
+
+        playStartTimeRef.current = Date.now();
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+        const playback = TrackPlayer.play();
+        updateNotification(song, true);
+        await playback;
+
+        fetch(`${SERVER_URL}/api/heartbeat`, {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify({
+            songId: song.id, isPlaying: true, elapsedMs: 0,
+            playlistId: playlistContext?.id || null,
+            playlistType: playlistContext?.type || null,
+          }),
+        }).then(r => r.json()).then(handleHeartbeatExtras).catch(() => {});
+
+        if (queueRef.current.length || playlist.length > 1) {
+          const batchSize = 10;
+          const addNextQueueBatch = async () => {
+            const batch = [];
+            while (batch.length < batchSize) {
+              const nextItem = queueItems.next();
+              if (nextItem.done) break;
+              batch.push(nextItem.value);
+            }
+            if (!batch.length) return false;
+            const tracks = await Promise.all(batch.map(item =>
+              makeNativeTrack(item.song, item.id, item.queueEntryId)
+            ));
+            if (loadTokenRef.current !== myToken) return false;
+            await TrackPlayer.add(tracks);
+            return true;
+          };
+
+          const initialQueueLoad = addNextQueueBatch();
+          nativeQueueReadyRef.current = initialQueueLoad;
+          initialQueueLoad.then(() => {
+            if (nativeQueueReadyRef.current === initialQueueLoad) {
+              nativeQueueReadyRef.current = null;
+            }
+          }, () => {
+            if (nativeQueueReadyRef.current === initialQueueLoad) {
+              nativeQueueReadyRef.current = null;
+            }
+          });
+
+          const queueLoad = (async () => {
+            let hasMoreTracks = await initialQueueLoad;
+            while (hasMoreTracks && loadTokenRef.current === myToken) {
+              await new Promise(resolve => setTimeout(resolve, 0));
+              hasMoreTracks = await addNextQueueBatch();
+            }
+          })();
+          queueLoad.catch(error => {
+            console.error('Could not prepare the upcoming playback queue:', error);
+          });
+        }
+      } catch (e) {
+        playbackStartingRef.current = false;
+        syncPlayingState(false);
+        console.error('playSong error:', e);
+      }
+      return;
+    }
+
     // ── Token de carga ───────────────────────────────────────────
     // Incrementamos el token al inicio. Si una segunda llamada llega
     // mientras estamos haciendo createAsync, nuestro token ya no coincide
@@ -634,7 +1089,7 @@ export const MusicProvider = ({ children, token, onLogout }) => {
       };
 
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: (await safeLocalPath(song.id)) || `${SERVER_URL}${song.url}` },
+        { uri: (await safeLocalPath(song.id)) || resolveMediaUrl(SERVER_URL, song.url) },
         { shouldPlay: true, progressUpdateIntervalMillis: 1000 },
         onStatus, true
       );
@@ -706,16 +1161,90 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   };
 
   const pauseSong = async () => {
+    if (Platform.OS === 'android') {
+      previousPressAtRef.current = 0;
+      playbackStartingRef.current = false;
+      syncPlayingState(false);
+      try { await TrackPlayer.pause(); } catch (error) {
+        console.error('Could not pause the Android music player:', error);
+        try {
+          const state = await TrackPlayer.getPlaybackState();
+          syncPlayingState(state.state === TrackPlayerState.Playing);
+        } catch (stateError) {
+          console.error('Could not refresh Android playback state after pausing:', stateError);
+        }
+      }
+      return;
+    }
     if (sound.current) try { await sound.current.pauseAsync(); } catch {}
     syncPlayingState(false);
   };
 
   const resumeSong = async () => {
+    if (Platform.OS === 'android') {
+      previousPressAtRef.current = 0;
+      playbackStartingRef.current = true;
+      syncPlayingState(true);
+      try { await TrackPlayer.play(); } catch (error) {
+        playbackStartingRef.current = false;
+        console.error('Could not resume the Android music player:', error);
+        try {
+          const state = await TrackPlayer.getPlaybackState();
+          syncPlayingState(state.state === TrackPlayerState.Playing);
+        } catch (stateError) {
+          console.error('Could not refresh Android playback state after resuming:', stateError);
+        }
+      }
+      return;
+    }
     if (sound.current) try { await sound.current.playAsync(); } catch {}
     syncPlayingState(true);
   };
 
   const playNext = async () => {
+    if (Platform.OS === 'android') {
+      previousPressAtRef.current = 0;
+      playbackStartingRef.current = true;
+      try {
+        let skipped = false;
+        const queueReady = nativeQueueReadyRef.current;
+        try {
+          await TrackPlayer.skipToNext();
+          skipped = true;
+        } catch {
+          if (queueReady) {
+            await queueReady;
+            await TrackPlayer.skipToNext();
+            skipped = true;
+          }
+        }
+        if (skipped) {
+          await TrackPlayer.play();
+          await syncNativeActiveTrack();
+          syncPlayingState(true);
+          return;
+        }
+
+        const [queuedSong] = queueRef.current;
+        const playlist = currentPlaylistRef.current;
+        const playlistIndex = currentIndexRef.current;
+        const nextSong = queuedSong
+          || (playlist.length > 1 ? playlist[(playlistIndex + 1) % playlist.length] : null);
+        if (nextSong) {
+          if (queuedSong) {
+            const remainingQueue = queueRef.current.slice(1);
+            queueRef.current = remainingQueue;
+            setQueue(remainingQueue);
+          }
+          await playSong(nextSong, playlist.length ? playlist : [nextSong], queuedSong ? null : currentPlaylistContextRef.current);
+        }
+        playbackStartingRef.current = false;
+      } catch (error) {
+        playbackStartingRef.current = false;
+        console.error('Could not skip to the next track:', error);
+      }
+      return;
+    }
     // La cola tiene prioridad, igual que al terminar una canción sola.
     // Las canciones de la cola no pertenecen a ninguna playlist en
     // concreto, así que se limpia el contexto.
@@ -732,33 +1261,154 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   };
 
   const playPrevious = async () => {
+    if (Platform.OS === 'android') {
+      const now = Date.now();
+      const isDoublePress = now - previousPressAtRef.current <= 700;
+      previousPressAtRef.current = isDoublePress ? 0 : now;
+      if (isDoublePress) playbackStartingRef.current = true;
+      try {
+        if (isDoublePress) {
+          const [tracks, activeIndex] = await Promise.all([
+            TrackPlayer.getQueue(),
+            TrackPlayer.getActiveTrackIndex(),
+          ]);
+          if (tracks.length > 1 && activeIndex !== undefined) {
+            const previousIndex = activeIndex > 0 ? activeIndex - 1 : tracks.length - 1;
+            await TrackPlayer.skip(previousIndex);
+            await TrackPlayer.play();
+            await syncNativeActiveTrack();
+            syncPlayingState(true);
+          } else {
+            playbackStartingRef.current = false;
+            await TrackPlayer.seekTo(0);
+            setPosition(0);
+            positionRef.current = 0;
+          }
+        } else {
+          await TrackPlayer.seekTo(0);
+          setPosition(0);
+          positionRef.current = 0;
+        }
+      } catch (error) {
+        playbackStartingRef.current = false;
+        console.error('Could not skip to the previous track:', error);
+      }
+      return;
+    }
     const pl = currentPlaylistRef.current;
     if (pl.length > 0) { const p = currentIndexRef.current === 0 ? pl.length - 1 : currentIndexRef.current - 1; currentIndexRef.current = p; setCurrentIndex(p); await playSong(pl[p], pl, currentPlaylistContextRef.current); }
   };
 
   // ── Cola de reproducción ──────────────────────────────────────
   const addToQueue = (song) => {
-    setQueue(prev => [...prev, song]);
+    const queuedSong = { ...song, _queueEntryId: `${Date.now()}-${Math.random()}` };
+    const nextQueue = [...queueRef.current, queuedSong];
+    queueRef.current = nextQueue;
+    setQueue(nextQueue);
+
+    if (Platform.OS === 'android' && currentSongRef.current) {
+      (async () => {
+        await ensureTrackPlayer();
+        const tracks = await TrackPlayer.getQueue();
+        const activeIndex = await TrackPlayer.getActiveTrackIndex();
+        let insertIndex = (activeIndex ?? -1) + 1;
+        while (tracks[insertIndex]?.queueEntryId) insertIndex++;
+        await TrackPlayer.add(
+          await makeNativeTrack(queuedSong, `queued-${queuedSong._queueEntryId}`, queuedSong._queueEntryId),
+          insertIndex
+        );
+      })().catch(error => console.error('Could not add the track to playback:', error));
+    }
   };
 
   const addManyToQueue = (songsToAdd) => {
-    setQueue(prev => [...prev, ...songsToAdd]);
+    const addedSongs = songsToAdd.map((song, index) => ({
+      ...song,
+      _queueEntryId: `${Date.now()}-${index}-${Math.random()}`,
+    }));
+    const nextQueue = [...queueRef.current, ...addedSongs];
+    queueRef.current = nextQueue;
+    setQueue(nextQueue);
+
+    if (Platform.OS === 'android' && currentSongRef.current && addedSongs.length) {
+      (async () => {
+        await ensureTrackPlayer();
+        const tracks = await TrackPlayer.getQueue();
+        const activeIndex = await TrackPlayer.getActiveTrackIndex();
+        let insertIndex = (activeIndex ?? -1) + 1;
+        while (tracks[insertIndex]?.queueEntryId) insertIndex++;
+        const nativeTracks = await Promise.all(addedSongs.map(song =>
+          makeNativeTrack(song, `queued-${song._queueEntryId}`, song._queueEntryId)
+        ));
+        await TrackPlayer.add(nativeTracks, insertIndex);
+      })().catch(error => console.error('Could not add tracks to playback:', error));
+    }
   };
 
   const removeFromQueue = (index) => {
-    setQueue(prev => prev.filter((_, i) => i !== index));
+    const removedSong = queueRef.current[index];
+    const nextQueue = queueRef.current.filter((_, i) => i !== index);
+    queueRef.current = nextQueue;
+    setQueue(nextQueue);
+
+    if (Platform.OS === 'android' && removedSong?._queueEntryId) {
+      (async () => {
+        const tracks = await TrackPlayer.getQueue();
+        const trackIndex = tracks.findIndex(track =>
+          track.queueEntryId === removedSong._queueEntryId
+        );
+        if (trackIndex >= 0) await TrackPlayer.remove(trackIndex);
+      })().catch(error => console.error('Could not remove the queued track:', error));
+    }
   };
 
-  const clearQueue = () => setQueue([]);
+  const clearQueue = () => {
+    const queueToClear = queueRef.current;
+    queueRef.current = [];
+    setQueue([]);
+
+    if (Platform.OS === 'android' && queueToClear.length) {
+      (async () => {
+        const tracks = await TrackPlayer.getQueue();
+        const activeIndex = await TrackPlayer.getActiveTrackIndex();
+        const indexes = tracks.reduce((result, track, index) => {
+          if (index !== activeIndex && track.queueEntryId) result.push(index);
+          return result;
+        }, []);
+        if (indexes.length) await TrackPlayer.remove(indexes);
+      })().catch(error => console.error('Could not clear the playback queue:', error));
+    }
+  };
 
   const moveQueueItem = (fromIndex, toIndex) => {
-    setQueue(prev => {
+    const nextQueue = (() => {
+      const prev = queueRef.current;
       if (toIndex < 0 || toIndex >= prev.length) return prev;
       const q = [...prev];
       const [item] = q.splice(fromIndex, 1);
       q.splice(toIndex, 0, item);
       return q;
-    });
+    })();
+    queueRef.current = nextQueue;
+    setQueue(nextQueue);
+
+    if (Platform.OS === 'android' && currentSongRef.current) {
+      (async () => {
+        const tracks = await TrackPlayer.getQueue();
+        const activeIndex = await TrackPlayer.getActiveTrackIndex();
+        const queuedIndexes = tracks.reduce((result, track, index) => {
+          if (index !== activeIndex && track.queueEntryId) result.push(index);
+          return result;
+        }, []);
+        if (queuedIndexes.length) await TrackPlayer.remove(queuedIndexes);
+        if (nextQueue.length) {
+          const nativeTracks = await Promise.all(nextQueue.map(song =>
+            makeNativeTrack(song, `queued-${song._queueEntryId}`, song._queueEntryId)
+          ));
+          await TrackPlayer.add(nativeTracks, (activeIndex ?? -1) + 1);
+        }
+      })().catch(error => console.error('Could not reorder the playback queue:', error));
+    }
   };
 
   // Reproduce inmediatamente una canción concreta de la cola y la quita de ahí
@@ -774,13 +1424,33 @@ export const MusicProvider = ({ children, token, onLogout }) => {
   };
 
   const seekTo = async (value) => {
-    setPosition(value);
-    positionRef.current = value;
+    const requestedPosition = Number.isFinite(value) ? Math.max(0, value) : 0;
+    const targetPosition = durationRef.current > 0
+      ? Math.min(requestedPosition, durationRef.current)
+      : requestedPosition;
+    setPosition(targetPosition);
+    positionRef.current = targetPosition;
+    if (Platform.OS === 'android') {
+      try {
+        await ensureTrackPlayer();
+        await TrackPlayer.seekTo(targetPosition / 1000);
+        const progress = await TrackPlayer.getProgress();
+        positionRef.current = progress.position * 1000;
+        setPosition(positionRef.current);
+        if (progress.duration > 0) {
+          durationRef.current = progress.duration * 1000;
+          setDuration(durationRef.current);
+        }
+      } catch (error) {
+        console.error('Could not seek in the Android music player:', error);
+      }
+      return;
+    }
     if (sound.current) {
-      try { await sound.current.setPositionAsync(value); } catch {}
+      try { await sound.current.setPositionAsync(targetPosition); } catch {}
       advancedRef.current = false;
       if (isPlayingRef.current && durationRef.current > 0) {
-        scheduleEndTimer(durationRef.current, value);
+        scheduleEndTimer(durationRef.current, targetPosition);
       } else if (endTimerRef.current) {
         clearTimeout(endTimerRef.current);
         endTimerRef.current = null;
@@ -788,7 +1458,19 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     }
   };
 
-  const toggleLoop = () => setIsLooping(prev => !prev);
+  const toggleLoop = () => {
+    const nextValue = !isLoopingRef.current;
+    isLoopingRef.current = nextValue;
+    setIsLooping(nextValue);
+    if (Platform.OS === 'android') {
+      const mode = nextValue
+        ? RepeatMode.Track
+        : (currentPlaylistRef.current.length > 1 ? RepeatMode.Queue : RepeatMode.Off);
+      TrackPlayer.setRepeatMode(mode).catch(error => {
+        console.error('Could not update repeat mode:', error);
+      });
+    }
+  };
 
   const toggleFavorite = async (songId) => {
     const wasFav = favorites.includes(songId);
@@ -844,6 +1526,18 @@ export const MusicProvider = ({ children, token, onLogout }) => {
         setCurrentSong(null);
         currentSongRef.current = null;
         if (endTimerRef.current) { clearTimeout(endTimerRef.current); endTimerRef.current = null; }
+        if (Platform.OS === 'android') {
+          await TrackPlayer.reset();
+          currentNativeTrackIdRef.current = null;
+          queueRef.current = [];
+          setQueue([]);
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+          setPosition(0);
+          setDuration(0);
+          await dismissNotification();
+          return;
+        }
         if (sound.current) { try { await sound.current.stopAsync(); await sound.current.unloadAsync(); } catch {} sound.current = null; }
         isPlayingRef.current = false;
         setIsPlaying(false);
@@ -856,7 +1550,12 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     try {
       const r = await fetch(`${SERVER_URL}/api/songs/${songId}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(updates) });
       const u = await r.json(); setSongs(prev => prev.map(s => s.id === songId ? u : s));
-      if (currentSong?.id === songId) setCurrentSong(u); return u;
+      if (currentSong?.id === songId) {
+        setCurrentSong(u);
+        currentSongRef.current = u;
+        await updateNativeMetadata(u);
+      }
+      return u;
     } catch {}
   };
 
@@ -867,7 +1566,23 @@ export const MusicProvider = ({ children, token, onLogout }) => {
     xhr.open('POST', `${SERVER_URL}/api/songs/${songId}/cover`);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) { try { const u = JSON.parse(xhr.responseText); setSongs(prev => prev.map(s => s.id === songId ? u : s)); setCurrentSong(prev => prev?.id === songId ? u : prev); resolve(u); } catch { reject(new Error('Respuesta inválida')); } }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const u = JSON.parse(xhr.responseText);
+          setSongs(prev => prev.map(s => s.id === songId ? u : s));
+          setCurrentSong(prev => {
+            if (prev?.id !== songId) return prev;
+            return u;
+          });
+          if (currentSongRef.current?.id === songId) {
+            currentSongRef.current = u;
+            updateNativeMetadata(u).catch(error => {
+              console.error('Could not update playback artwork:', error);
+            });
+          }
+          resolve(u);
+        } catch { reject(new Error('Respuesta inválida')); }
+      }
       else reject(new Error('Error: ' + xhr.status));
     };
     xhr.onerror = () => reject(new Error('Error de red'));
@@ -893,11 +1608,11 @@ export const MusicProvider = ({ children, token, onLogout }) => {
 
   return (
     <MusicContext.Provider value={{
-      songs, currentSong, isPlaying, position, duration, favorites, playlists,
-      isLooping, searchQuery, setSearchQuery, setPosition,
+      songs, currentSong, isPlaying, favorites, playlists,
+      isLooping, searchQuery, setSearchQuery, setPosition, currentPlaylist, currentIndex,
       playSong, pauseSong, resumeSong, playNext, playPrevious, seekTo, toggleLoop,
       toggleFavorite, createPlaylist, updatePlaylist, deletePlaylist,
-      uploadSong, deleteSong, updateSong, uploadCover, fetchSongs, syncSongs,
+      uploadSong, deleteSong, updateSong, uploadCover, fetchSongs, loadPlaylists, syncSongs,
       getFilteredSongs, getAllSongs, SERVER_URL, onLogout, activeListeners, fetchListeners,
       folderPlaylists, fetchFolderPlaylists,
       queue, addToQueue, addManyToQueue, removeFromQueue, clearQueue, moveQueueItem, playFromQueue,

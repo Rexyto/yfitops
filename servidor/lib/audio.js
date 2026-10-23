@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { parseFile } from 'music-metadata';
 import { CANCIONES_DIR, PLAYLIST_DIR, PORTADAS_DIR, AUDIO_EXTS, IMAGE_EXTS } from './config.js';
+import { findCoverFile, findOrDownloadCover, normalizeCoverName, parseTrackFilename } from './covers.js';
 
 // ── Carátulas personalizadas (carpeta portadas/) ──────────────
 // Permite poner un .webp con el mismo nombre que el mp3 en la carpeta
@@ -16,19 +17,8 @@ export async function listPortadaFiles() {
   }
 }
 
-export function matchCustomCover(filename, portadaFiles) {
-  const rawName = path.parse(filename).name;
-  const cleanName = path.parse(filename.replace(/^\d+-/, '')).name;
-  const candidateNames = [rawName, cleanName];
-  const candidateExts = ['.webp', '.png', '.jpg', '.jpeg'];
-  for (const name of candidateNames) {
-    for (const ext of candidateExts) {
-      const target = `${name}${ext}`.toLowerCase();
-      const match = portadaFiles.find(f => f.toLowerCase() === target);
-      if (match) return `/portadas/${encodeURIComponent(match)}`;
-    }
-  }
-  return null;
+export function matchCustomCover(filename, portadaFiles, title = '', artist = '') {
+  return findCoverFile(filename, portadaFiles, title, artist);
 }
 
 export async function getAudioDuration(filePath) {
@@ -52,47 +42,117 @@ export async function getAudioDuration(filePath) {
   return 0;
 }
 
-export async function processAudioFile(filename, existingId = null) {
-  const filePath = path.join(CANCIONES_DIR, filename);
-  const cleanFilename = path.parse(filename.replace(/^\d+-/, '')).name;
-  let title = cleanFilename;
-  let artist = 'Desconocido';
-  let album = 'Desconocido';
-  let coverUrl = null;
-  const songId = existingId || Date.now().toString();
-
+export async function readTrackMetadata(filePath, filename, defaultAlbum) {
+  const fallback = parseTrackFilename(filename);
+  const metadata = {
+    title: fallback.title,
+    artist: fallback.artist,
+    album: defaultAlbum,
+    picture: null,
+  };
   try {
     const meta = await parseFile(filePath, { duration: false, skipCovers: false });
-    if (meta.common.title) title = meta.common.title;
-    if (meta.common.artist) artist = meta.common.artist;
-    if (meta.common.album) album = meta.common.album;
-    if (meta.common.picture?.length > 0) {
-      const coverFilename = `${songId}.jpg`;
-      await fs.writeFile(path.join(CANCIONES_DIR, coverFilename), meta.common.picture[0].data);
-      coverUrl = `/canciones/${coverFilename}`;
-    }
+    if (meta.common.title) metadata.title = meta.common.title;
+    if (meta.common.artist) metadata.artist = meta.common.artist;
+    if (meta.common.album) metadata.album = meta.common.album;
+    if (meta.common.picture?.length > 0) metadata.picture = meta.common.picture[0].data;
+    const comments = Array.isArray(meta.common.comment)
+      ? meta.common.comment.map(comment => typeof comment === 'string' ? comment : comment?.text || '')
+      : [];
+    metadata.source = [meta.common.url, ...comments].filter(Boolean).join(' ');
   } catch (e) {
     console.error('[AUDIO] Metadata error for', filename, e.message || e);
   }
+  return metadata;
+}
 
-  const customCover = matchCustomCover(filename, await listPortadaFiles());
-  if (customCover) coverUrl = customCover;
+async function createAudioRecord({
+  filePath,
+  filename,
+  songId,
+  metadata,
+  embeddedCoverPath,
+  embeddedCoverUrl,
+  audioUrl,
+  previousCoverUrl = null,
+  fetchMissingArtwork = false,
+}) {
+  let coverUrl = null;
+  const hasEmbeddedPicture = Boolean(metadata.picture);
+  if (hasEmbeddedPicture) {
+    await fs.writeFile(embeddedCoverPath, metadata.picture);
+    coverUrl = embeddedCoverUrl;
+    console.log(`[PORTADA] Extraída del audio "${metadata.title}"`);
+  }
 
+  const customCover = matchCustomCover(filename, await listPortadaFiles(), metadata.title, metadata.artist);
+  if (customCover) {
+    coverUrl = customCover;
+    console.log(`[PORTADA] Reutilizada "${metadata.title}" desde ${customCover}`);
+  } else if (!hasEmbeddedPicture && fetchMissingArtwork) {
+    coverUrl = await findOrDownloadCover(filename, metadata.title, metadata.artist, metadata.source);
+  }
+  if (!coverUrl && previousCoverUrl) coverUrl = previousCoverUrl;
   const duration = await getAudioDuration(filePath);
   return {
     id: songId,
-    title,
-    artist,
-    album,
+    title: metadata.title,
+    artist: metadata.artist,
+    album: metadata.album,
     duration,
     filename,
-    url: `/canciones/${encodeURIComponent(filename)}`,
+    url: audioUrl,
     coverUrl,
-    uploadDate: new Date().toISOString()
   };
 }
 
-export async function scanPlaylistFolder(folderName, existingPl) {
+export async function processAudioFile(filename, existingId = null) {
+  const filePath = path.join(CANCIONES_DIR, filename);
+  const songId = existingId || Date.now().toString();
+  const metadata = await readTrackMetadata(filePath, filename, 'Desconocido');
+  return {
+    ...await createAudioRecord({
+      filePath,
+      filename,
+      songId,
+      metadata,
+      embeddedCoverPath: path.join(CANCIONES_DIR, `${songId}.jpg`),
+      embeddedCoverUrl: `/canciones/${songId}.jpg`,
+      audioUrl: `/canciones/${encodeURIComponent(filename)}`,
+    }),
+    uploadDate: new Date().toISOString(),
+  };
+}
+
+export async function processPlaylistAudioFile(
+  folderName,
+  filename,
+  previousSong = null,
+  metadata = null,
+  { fetchMissingArtwork = true } = {}
+) {
+  const filePath = path.join(PLAYLIST_DIR, folderName, filename);
+  const songId = previousSong?.id || `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+  const trackMetadata = metadata || await readTrackMetadata(filePath, filename, folderName);
+  const coverFilename = `pl_${songId}.jpg`;
+  return createAudioRecord({
+    filePath,
+    filename,
+    songId,
+    metadata: trackMetadata,
+    embeddedCoverPath: path.join(PLAYLIST_DIR, folderName, coverFilename),
+    embeddedCoverUrl: `/playlist/${encodeURIComponent(folderName)}/${encodeURIComponent(coverFilename)}`,
+    audioUrl: `/playlist/${encodeURIComponent(folderName)}/${encodeURIComponent(filename)}`,
+    previousCoverUrl: previousSong?.coverUrl || null,
+    fetchMissingArtwork,
+  });
+}
+
+export async function scanPlaylistFolder(
+  folderName,
+  existingPl,
+  { retryMissingCovers = false, fetchMissingCovers = true } = {}
+) {
   const folderPath = path.join(PLAYLIST_DIR, folderName);
   try {
     const s = await fs.stat(folderPath);
@@ -113,52 +173,101 @@ export async function scanPlaylistFolder(folderName, existingPl) {
 
   const audioFiles = files.filter(f => AUDIO_EXTS.includes(path.extname(f).toLowerCase()));
   const existing = existingPl || { id: Date.now().toString() + Math.random().toString(36).slice(2, 5), songs: [] };
-  const existingMap = new Map((existing.songs || []).map(s => [s.filename, s]));
+  const oldSongs = Array.isArray(existing.songs) ? existing.songs : [];
+  const existingMap = new Map(oldSongs.map(s => [s.filename, s]));
+  const remainingSongsByIdentity = new Map();
+  const orphanSongs = oldSongs.filter(song => !audioFiles.includes(song.filename));
+  for (const song of oldSongs) {
+    if (audioFiles.includes(song.filename)) continue;
+    const key = `${normalizeCoverName(song.title)}|${normalizeCoverName(song.artist)}`;
+    if (key === '|') continue;
+    if (!remainingSongsByIdentity.has(key)) remainingSongsByIdentity.set(key, []);
+    remainingSongsByIdentity.get(key).push(song);
+  }
+  const newFiles = audioFiles.filter(filename => !existingMap.has(filename));
+  const metadataByFilename = new Map();
+  const previousSongByFilename = new Map();
+  const matchedOldSongIds = new Set();
+
+  for (const filename of newFiles) {
+    const metadata = await readTrackMetadata(path.join(folderPath, filename), filename, folderName);
+    metadataByFilename.set(filename, metadata);
+    const key = `${normalizeCoverName(metadata.title)}|${normalizeCoverName(metadata.artist)}`;
+    const matchingSongs = remainingSongsByIdentity.get(key);
+    const previousSong = matchingSongs?.shift() || null;
+    if (previousSong) {
+      previousSongByFilename.set(filename, previousSong);
+      matchedOldSongIds.add(previousSong.id);
+    }
+  }
+
+  const unmatchedNewFiles = newFiles.filter(filename => !previousSongByFilename.has(filename));
+  const unmatchedOldSongs = orphanSongs.filter(song => !matchedOldSongIds.has(song.id));
+  if (
+    unmatchedNewFiles.length === 1
+    && unmatchedOldSongs.length === 1
+    && unmatchedOldSongs[0].coverUrl
+  ) {
+    previousSongByFilename.set(unmatchedNewFiles[0], unmatchedOldSongs[0]);
+    matchedOldSongIds.add(unmatchedOldSongs[0].id);
+  }
+
   const songs = [];
-  const portadaFiles = await listPortadaFiles();
 
   for (const filename of audioFiles) {
-    const customCover = matchCustomCover(filename, portadaFiles);
-
     if (existingMap.has(filename)) {
       const existingSong = existingMap.get(filename);
-      songs.push(customCover && existingSong.coverUrl !== customCover ? { ...existingSong, coverUrl: customCover } : existingSong);
+      const customCover = matchCustomCover(filename, await listPortadaFiles(), existingSong.title, existingSong.artist);
+      if (customCover && existingSong.coverUrl !== customCover) {
+        console.log(`[PORTADA] Actualizada "${existingSong.title}" desde ${customCover}`);
+        songs.push({ ...existingSong, coverUrl: customCover });
+      } else if (retryMissingCovers && !existingSong.coverUrl) {
+        const fileMetadata = await readTrackMetadata(path.join(folderPath, filename), filename, folderName);
+        const persistedMetadata = {
+          ...fileMetadata,
+          title: typeof existingSong.title === 'string' ? existingSong.title : fileMetadata.title,
+          artist: typeof existingSong.artist === 'string' ? existingSong.artist : fileMetadata.artist,
+          album: typeof existingSong.album === 'string' ? existingSong.album : fileMetadata.album,
+        };
+        const recoveredSong = await processPlaylistAudioFile(
+          folderName,
+          filename,
+          existingSong,
+          persistedMetadata,
+          { fetchMissingArtwork: fetchMissingCovers }
+        );
+        if (recoveredSong.coverUrl) {
+          console.log(`[PORTADA] Recuperada al sincronizar "${recoveredSong.title}"`);
+        }
+        songs.push(recoveredSong);
+      } else {
+        songs.push(existingSong);
+      }
       continue;
     }
 
-    const filePath = path.join(folderPath, filename);
-    let title = path.parse(filename).name;
-    let artist = 'Desconocido';
-    let album = folderName;
-    let songCoverUrl = null;
-    const songId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
-
-    try {
-      const meta = await parseFile(filePath, { duration: false, skipCovers: false });
-      if (meta.common.title) title = meta.common.title;
-      if (meta.common.artist) artist = meta.common.artist;
-      if (meta.common.album) album = meta.common.album;
-      if (meta.common.picture?.length > 0) {
-        const coverFilename = `pl_${songId}.jpg`;
-        await fs.writeFile(path.join(PLAYLIST_DIR, folderName, coverFilename), meta.common.picture[0].data);
-        songCoverUrl = `/playlist/${encodeURIComponent(folderName)}/${coverFilename}`;
-      }
-    } catch {}
-
-    if (customCover) songCoverUrl = customCover;
-
-    const duration = await getAudioDuration(filePath);
-    songs.push({
-      id: songId,
-      title,
-      artist,
-      album,
-      duration,
+    const metadata = metadataByFilename.get(filename);
+    const previousSong = previousSongByFilename.get(filename) || null;
+    const song = await processPlaylistAudioFile(
+      folderName,
       filename,
-      url: `/playlist/${encodeURIComponent(folderName)}/${encodeURIComponent(filename)}`,
-      coverUrl: songCoverUrl
-    });
+      previousSong,
+      metadata,
+      { fetchMissingArtwork: fetchMissingCovers }
+    );
+    songs.push(song);
+    if (previousSong && previousSong.filename !== filename) {
+      console.log(`[DB] Archivo renombrado "${previousSong.filename}" → "${filename}" en playlist "${folderName}"`);
+    } else if (!previousSong) {
+      console.log(`[DB] Añadida "${song.title}"${song.artist !== 'Desconocido' ? ` - ${song.artist}` : ''} a playlist "${folderName}"`);
+    }
     await new Promise(r => setTimeout(r, 1));
+  }
+
+  for (const oldSong of oldSongs) {
+    if (!audioFiles.includes(oldSong.filename) && !matchedOldSongIds.has(oldSong.id)) {
+      console.log(`[DB] Eliminada "${oldSong.title}" (${oldSong.filename}) de playlist "${folderName}"`);
+    }
   }
 
   return {

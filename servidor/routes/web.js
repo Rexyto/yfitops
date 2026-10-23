@@ -5,6 +5,8 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { webAuthMiddleware, hashPassword } from '../lib/auth.js';
 import { upload, uploadMemoryImage } from '../lib/upload.js';
+import { cleanupUnusedSongCovers, coverUrlForCleanup, songCoverUrls } from '../lib/coverFiles.js';
+import { convertImageToWebp, findOrDownloadCover, sharedCoverFilename } from '../lib/covers.js';
 import {
   readUsers,
   writeUsers,
@@ -132,6 +134,7 @@ export default function webRoutes(app) {
         `UPDATE ${type === 'folder' ? 'folder_playlists' : 'playlists'} SET songs = ?${type === 'folder' ? ', updated_at = CURRENT_TIMESTAMP' : ''} WHERE id = ?`,
         [JSON.stringify(songs), playlist.id]
       );
+      console.log(`[DB] Añadida "${updatedSong.title}" a playlist "${playlist.name}"`);
       res.status(201).json(updatedSong);
     } catch (error) {
       console.error('[ADMIN] Error subiendo canción a playlist:', error.message);
@@ -176,6 +179,7 @@ export default function webRoutes(app) {
         );
       }
 
+      console.log(`[DB] Playlist ${type === 'folder' ? 'renombrada' : 'editada'}: "${playlist.name}" → "${name}"`);
       res.json(await findAdminPlaylist(type, playlist.id));
     } catch (error) {
       console.error('[ADMIN] Error actualizando playlist:', error.message);
@@ -191,50 +195,146 @@ export default function webRoutes(app) {
     try {
       const playlist = await findAdminPlaylist(type, req.params.id);
       if (!playlist) return res.status(404).json({ error: 'Playlist no encontrada' });
-      const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+      const previousCoverUrl = playlist.coverUrl;
       let coverUrl;
       let filePath;
       if (type === 'folder') {
         const folderName = safeFileName(playlist.folderName);
         if (!folderName) return res.status(400).json({ error: 'Carpeta inválida' });
-        filePath = path.join(PLAYLIST_DIR, folderName, `cover${ext}`);
-        coverUrl = `/playlist/${encodeURIComponent(folderName)}/cover${ext}`;
+        filePath = path.join(PLAYLIST_DIR, folderName, 'cover.webp');
+        coverUrl = `/playlist/${encodeURIComponent(folderName)}/cover.webp`;
       } else {
-        filePath = path.join(PORTADAS_DIR, 'admin-playlists', `${playlist.id}${ext}`);
-        coverUrl = `/portadas/admin-playlists/${encodeURIComponent(`${playlist.id}${ext}`)}`;
+        filePath = path.join(PORTADAS_DIR, 'admin-playlists', `${playlist.id}.webp`);
+        coverUrl = `/portadas/admin-playlists/${encodeURIComponent(`${playlist.id}.webp`)}`;
       }
       await fsp.mkdir(path.dirname(filePath), { recursive: true });
-      await fsp.writeFile(filePath, req.file.buffer);
+      const webpBuffer = await convertImageToWebp(req.file.buffer, req.file.originalname);
+      await fsp.writeFile(filePath, webpBuffer);
       const pool = await getConnection();
       await pool.execute(`UPDATE ${type === 'folder' ? 'folder_playlists' : 'playlists'} SET cover_url = ? WHERE id = ?`, [coverUrl, playlist.id]);
+      await cleanupUnusedSongCovers(coverUrlForCleanup(previousCoverUrl));
+      console.log(`[PORTADA] Actualizada para playlist "${playlist.name}" (${coverUrl})`);
       res.json(await findAdminPlaylist(type, playlist.id));
     } catch (error) {
-      console.error('[ADMIN] Error subiendo portada:', error.message);
-      res.status(500).json({ error: 'No se pudo subir la portada' });
+      console.error('[ADMIN] Error convirtiendo/subiendo portada:', error.message);
+      res.status(500).json({ error: 'No se pudo convertir la portada a WebP. Comprueba que ffmpeg esté instalado.' });
     }
   });
 
   app.put('/web/admin/playlists/:type/:playlistId/songs/:songId', webAuthMiddleware, async (req, res) => {
     if (!requireSuperadmin(req, res)) return;
     const type = playlistType(req.params.type);
-    const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
-    if (!type || !title) return res.status(400).json({ error: 'Título inválido' });
+    const hasTitle = typeof req.body.title === 'string';
+    const hasArtist = typeof req.body.artist === 'string';
+    const hasAlbum = typeof req.body.album === 'string';
+    if (!type || (!hasTitle && !hasArtist && !hasAlbum)) {
+      return res.status(400).json({ error: 'Debes proporcionar al menos un campo para editar' });
+    }
+    const title = hasTitle ? req.body.title.trim() : undefined;
+    const artist = hasArtist ? req.body.artist.trim() : undefined;
+    const album = hasAlbum ? req.body.album.trim() : undefined;
+    if (title !== undefined && !title) return res.status(400).json({ error: 'El título no puede estar vacío' });
+    if (title?.length > 500 || artist?.length > 255 || album?.length > 255) {
+      return res.status(400).json({ error: 'El título, artista o álbum supera la longitud permitida' });
+    }
 
     try {
       const playlist = await findAdminPlaylist(type, req.params.playlistId);
       const song = playlist?.songs?.find(item => item.id === req.params.songId);
       if (!song) return res.status(404).json({ error: 'Canción no encontrada' });
-      const updatedSong = { ...song, title };
-      const songs = playlist.songs.map(item => item.id === song.id ? updatedSong : item);
+      const filename = safeFileName(song.filename);
+      if (!filename) return res.status(400).json({ error: 'El archivo de la canción no es válido' });
+      const folderName = type === 'folder' ? safeFileName(playlist.folderName) : null;
+      if (type === 'folder' && !folderName) {
+        return res.status(400).json({ error: 'La carpeta de la canción no es válida' });
+      }
+      const mediaUrl = type === 'folder'
+        ? `/playlist/${encodeURIComponent(folderName)}/${encodeURIComponent(filename)}`
+        : `/canciones/${encodeURIComponent(filename)}`;
+      const updatedSong = {
+        ...song,
+        url: mediaUrl,
+        ...(title !== undefined ? { title } : {}),
+        ...(artist !== undefined ? { artist } : {}),
+        ...(album !== undefined ? { album } : {}),
+      };
+      const metadataChanged = updatedSong.title !== song.title
+        || updatedSong.artist !== song.artist
+        || updatedSong.album !== song.album;
+      if (metadataChanged || !updatedSong.coverUrl) {
+        try {
+          const refreshedCover = await findOrDownloadCover(
+            updatedSong.filename,
+            updatedSong.title,
+            updatedSong.artist || 'Desconocido',
+            '',
+            { refresh: metadataChanged }
+          );
+          if (refreshedCover) updatedSong.coverUrl = refreshedCover;
+        } catch (error) {
+          console.error(`[PORTADA] Error buscando portada tras editar "${updatedSong.title}":`, error.message);
+        }
+      }
       const pool = await getConnection();
-      await pool.execute(
-        `UPDATE ${type === 'folder' ? 'folder_playlists' : 'playlists'} SET songs = ?${type === 'folder' ? ', updated_at = CURRENT_TIMESTAMP' : ''} WHERE id = ?`,
-        [JSON.stringify(songs), playlist.id]
-      );
-      if (type === 'manual') await pool.execute('UPDATE songs SET title = ? WHERE id = ?', [title, song.id]);
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        for (const { table, hasUpdatedAt } of [
+          { table: 'playlists', hasUpdatedAt: false },
+          { table: 'folder_playlists', hasUpdatedAt: true },
+        ]) {
+          const [rows] = await connection.execute(`SELECT id, songs FROM ${table}`);
+          for (const row of rows) {
+            const storedSongs = typeof row.songs === 'string' ? JSON.parse(row.songs || '[]') : row.songs;
+            if (!Array.isArray(storedSongs)) {
+              throw new Error(`La lista de canciones de ${table} ${row.id} no es válida`);
+            }
+            let found = false;
+            const nextSongs = storedSongs.map(item => {
+              if (String(item.id) !== String(song.id)) return item;
+              found = true;
+              return {
+                ...item,
+                title: updatedSong.title,
+                artist: updatedSong.artist,
+                album: updatedSong.album,
+                coverUrl: updatedSong.coverUrl,
+                url: updatedSong.url,
+              };
+            });
+            if (found) {
+              await connection.execute(
+                `UPDATE ${table} SET songs = ?${hasUpdatedAt ? ', updated_at = CURRENT_TIMESTAMP' : ''} WHERE id = ?`,
+                [JSON.stringify(nextSongs), row.id]
+              );
+            }
+          }
+        }
+        if (type === 'manual') {
+          await connection.execute(
+            'UPDATE songs SET title = ?, artist = ?, album = ?, cover_url = ?, url = ? WHERE id = ?',
+            [updatedSong.title || '', updatedSong.artist || '', updatedSong.album || '', updatedSong.coverUrl || null, updatedSong.url, song.id]
+          );
+        }
+        await connection.commit();
+      } catch (error) {
+        try {
+          await connection.rollback();
+        } catch (rollbackError) {
+          console.error('[ADMIN] Error revirtiendo cambios de metadatos:', rollbackError.message);
+        }
+        throw error;
+      } finally {
+        connection.release();
+      }
+      console.log(`[DB] Metadatos editados para "${song.title}" en playlist "${playlist.name}"`);
+      if (updatedSong.coverUrl && updatedSong.coverUrl !== song.coverUrl) {
+        console.log(`[PORTADA] Asignada a "${updatedSong.title}" tras editar sus metadatos (${updatedSong.coverUrl})`);
+      }
       res.json(updatedSong);
     } catch (error) {
-      res.status(500).json({ error: 'No se pudo editar la canción' });
+      console.error('[ADMIN] Error editando metadatos de canción:', error.message);
+      res.status(500).json({ error: 'No se pudieron editar los metadatos de la canción' });
     }
   });
 
@@ -247,13 +347,12 @@ export default function webRoutes(app) {
       const playlist = await findAdminPlaylist(type, req.params.playlistId);
       const song = playlist?.songs?.find(item => item.id === req.params.songId);
       if (!song) return res.status(404).json({ error: 'Canción no encontrada' });
-      const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
-      const relativeDir = type === 'folder' ? path.join(playlist.folderName) : '';
-      const filePath = path.join(type === 'folder' ? PLAYLIST_DIR : CANCIONES_DIR, relativeDir, `${song.id}${ext}`);
-      const coverUrl = type === 'folder'
-        ? `/playlist/${encodeURIComponent(playlist.folderName)}/${encodeURIComponent(`${song.id}${ext}`)}`
-        : `/canciones/${encodeURIComponent(`${song.id}${ext}`)}`;
-      await fsp.writeFile(filePath, req.file.buffer);
+      const previousCoverUrl = song.coverUrl;
+      const filename = sharedCoverFilename(song.title, song.artist);
+      const filePath = path.join(PORTADAS_DIR, filename);
+      const coverUrl = `/portadas/${encodeURIComponent(filename)}`;
+      const webpBuffer = await convertImageToWebp(req.file.buffer, req.file.originalname);
+      await fsp.writeFile(filePath, webpBuffer);
       const songs = playlist.songs.map(item => item.id === song.id ? { ...item, coverUrl } : item);
       const pool = await getConnection();
       await pool.execute(
@@ -261,9 +360,11 @@ export default function webRoutes(app) {
         [JSON.stringify(songs), playlist.id]
       );
       if (type === 'manual') await pool.execute('UPDATE songs SET cover_url = ? WHERE id = ?', [coverUrl, song.id]);
+      await cleanupUnusedSongCovers(coverUrlForCleanup(previousCoverUrl));
+      console.log(`[PORTADA] Actualizada para "${song.title}" (${coverUrl})`);
       res.json(songs.find(item => item.id === song.id));
     } catch (error) {
-      res.status(500).json({ error: 'No se pudo subir la portada de la canción' });
+      res.status(500).json({ error: 'No se pudo convertir la portada a WebP. Comprueba que ffmpeg esté instalado.' });
     }
   });
 
@@ -282,12 +383,11 @@ export default function webRoutes(app) {
       );
       const baseDir = type === 'folder' ? path.join(PLAYLIST_DIR, playlist.folderName) : CANCIONES_DIR;
       if (safeFileName(song.filename)) await fsp.unlink(path.join(baseDir, song.filename)).catch(() => {});
-      if (safeFileName(song.id)) {
-        for (const ext of ['.jpg', '.jpeg', '.png', '.webp']) await fsp.unlink(path.join(baseDir, `${song.id}${ext}`)).catch(() => {});
-      }
       if (type === 'manual') {
         await pool.execute('DELETE FROM songs WHERE id = ?', [song.id]);
       }
+      await cleanupUnusedSongCovers(songCoverUrls(song.id, type === 'folder' ? playlist.folderName : null));
+      console.log(`[DB] Eliminado "${song.title}" (${song.filename}) de playlist "${playlist.name}"`);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'No se pudo eliminar la canción' });

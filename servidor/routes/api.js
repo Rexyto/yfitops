@@ -2,10 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import jwt from 'jsonwebtoken';
 import { authMiddleware, webAuthMiddleware, hashPassword } from '../lib/auth.js';
-import { upload, uploadImage } from '../lib/upload.js';
+import { upload, uploadMemoryImage } from '../lib/upload.js';
+import { cleanupUnusedSongCovers, coverUrlForCleanup, songCoverUrls } from '../lib/coverFiles.js';
+import { convertImageToWebp, sharedCoverFilename } from '../lib/covers.js';
 import { readData, writeData, readDataPl, writeDataPl, readVersion, readChangelog, readStats, writeStats, readUsers, writeUsers, avg } from '../lib/storage.js';
 import { processAudioFile, getAudioDuration, listPortadaFiles, matchCustomCover } from '../lib/audio.js';
-import { CANCIONES_DIR, PLAYLIST_DIR, AUDIO_EXTS, JWT_SECRET } from '../lib/config.js';
+import { CANCIONES_DIR, PLAYLIST_DIR, PORTADAS_DIR, AUDIO_EXTS, JWT_SECRET } from '../lib/config.js';
 import { activeListeners } from '../lib/activeListeners.js';
 import { syncPlaylistDir } from '../lib/watchers.js';
 import { addListeningSeconds, recordSongPlay, recordPlaylistPlay, getUserDailyListening, getMostPlayedSong, getMostPlayedPlaylist, getCurrentStreak, getUserListeningStats } from '../lib/userStats.js';
@@ -193,6 +195,7 @@ export default function apiRoutes(app) {
 
     data.songs.push(song);
     await writeData(data);
+    console.log(`[DB] Añadida canción "${song.title}"${song.artist !== 'Desconocido' ? ` - ${song.artist}` : ''} (${song.filename})`);
     const users = await readUsers();
     const userIdx = users.findIndex(u => u.id === req.user.id);
     if (userIdx >= 0) {
@@ -213,6 +216,7 @@ export default function apiRoutes(app) {
     if (artist !== undefined) data.songs[idx].artist = artist;
     if (album !== undefined) data.songs[idx].album = album;
     await writeData(data);
+    console.log(`[DB] Editada canción "${data.songs[idx].title}" (${data.songs[idx].filename})`);
     res.json(data.songs[idx]);
   });
 
@@ -221,7 +225,6 @@ export default function apiRoutes(app) {
     const song = data.songs.find(s => s.id === req.params.id);
     if (!song) return res.status(404).json({ error: 'No encontrada' });
     try { await fs.promises.unlink(path.join(CANCIONES_DIR, song.filename)); } catch {}
-    try { await fs.promises.unlink(path.join(CANCIONES_DIR, `${req.params.id}.jpg`)); } catch {}
     data.songs = data.songs.filter(s => s.id !== req.params.id);
     const users = await readUsers();
     for (const u of users) {
@@ -230,17 +233,29 @@ export default function apiRoutes(app) {
     }
     await writeUsers(users);
     await writeData(data);
+    await cleanupUnusedSongCovers(songCoverUrls(song.id));
+    console.log(`[DB] Eliminada canción "${song.title}" (${song.filename})`);
     res.json({ success: true });
   });
 
-  app.post('/api/songs/:id/cover', authMiddleware, uploadImage.single('cover'), async (req, res) => {
+  app.post('/api/songs/:id/cover', authMiddleware, uploadMemoryImage.single('cover'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No imagen' });
     const data = await readData();
     const idx = data.songs.findIndex(s => s.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'No encontrada' });
-    const ext = path.extname(req.file.filename).toLowerCase() || '.jpg';
-    data.songs[idx].coverUrl = `/canciones/${req.params.id}${ext}`;
-    await writeData(data);
+    const previousCoverUrl = data.songs[idx].coverUrl;
+    try {
+      const webpBuffer = await convertImageToWebp(req.file.buffer, req.file.originalname);
+      const filename = sharedCoverFilename(data.songs[idx].title, data.songs[idx].artist);
+      await fs.promises.writeFile(path.join(PORTADAS_DIR, filename), webpBuffer);
+      data.songs[idx].coverUrl = `/portadas/${encodeURIComponent(filename)}`;
+      await writeData(data);
+      await cleanupUnusedSongCovers(coverUrlForCleanup(previousCoverUrl));
+    } catch (error) {
+      console.error(`[PORTADA] No se pudo convertir/subir la portada de "${data.songs[idx].title}":`, error.message);
+      return res.status(500).json({ error: 'No se pudo convertir la portada a WebP. Comprueba que ffmpeg esté instalado.' });
+    }
+    console.log(`[PORTADA] Actualizada manualmente para "${data.songs[idx].title}" (${data.songs[idx].coverUrl})`);
     res.json(data.songs[idx]);
   });
 
@@ -309,7 +324,7 @@ export default function apiRoutes(app) {
   });
 
   app.post('/api/folderplaylists/sync', authMiddleware, async (req, res) => {
-    await syncPlaylistDir();
+    await syncPlaylistDir({ retryMissingCovers: true });
     const data = await readDataPl();
     res.json({ success: true, count: data.playlists.length });
   });
@@ -359,7 +374,7 @@ export default function apiRoutes(app) {
       }
     }
     await writeData(data);
-    await syncPlaylistDir();
+    await syncPlaylistDir({ retryMissingCovers: true });
 
     const dataPl = await readDataPl();
     const matchedInPlaylists = dataPl.playlists.reduce(
@@ -377,6 +392,7 @@ export default function apiRoutes(app) {
   app.get('/api/stats', webAuthMiddleware, async (req, res) => {
     if (req.webUser.role !== 'superadmin') return res.status(403).json({ error: 'Sin permisos' });
     const stats = await readStats();
+    const latencySamples = stats.latencySamples.slice(-20);
     const days = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
@@ -387,8 +403,8 @@ export default function apiRoutes(app) {
       totalHours: Math.round(stats.totalListeningSeconds / 3600 * 10) / 10,
       totalListeningSeconds: stats.totalListeningSeconds,
       totalSongsPlayed: stats.totalSongsPlayed,
-      avgLatencyMs: avg(stats.latencySamples),
-      latencySamples: stats.latencySamples.slice(-20),
+      avgLatencyMs: latencySamples.length ? avg(latencySamples) : null,
+      latencySamples,
       avgProcessingMs: avg(stats.processingTimes),
       processingTimes: stats.processingTimes.slice(-20),
       dailyChart: days,

@@ -9,6 +9,8 @@ const PROFILE_PIC_KEY = 'yfitops_profile_picture_uri';
 const OFFLINE_PLAYLISTS_KEY = 'yfitops_offline_playlists';
 
 const downloadsDir = new Directory(Paths.document, 'yfitops-downloads');
+let downloadedFilesBySongId = new Map();
+let downloadedFilesIndexed = false;
 
 function ensureDownloadsDir() {
   try { if (!downloadsDir.exists) downloadsDir.create(); } catch {}
@@ -33,9 +35,15 @@ async function writeOfflinePlaylists(list) {
 
 function findDownloadedFile(songId) {
   ensureDownloadsDir();
+  const id = String(songId);
+  if (downloadedFilesIndexed) return downloadedFilesBySongId.get(id) || null;
   try {
     const entries = downloadsDir.list();
-    return entries.find(e => e.name?.startsWith(`${songId}.`)) || null;
+    downloadedFilesBySongId = new Map(entries
+      .filter(entry => entry.name?.includes('.'))
+      .map(entry => [entry.name.slice(0, entry.name.lastIndexOf('.')), entry]));
+    downloadedFilesIndexed = true;
+    return downloadedFilesBySongId.get(id) || null;
   } catch { return null; }
 }
 
@@ -126,6 +134,10 @@ export function SettingsProvider({ children }) {
       const list = await readOfflinePlaylists();
       setOfflinePlaylists(list);
       const entries = downloadsDir.list();
+      downloadedFilesBySongId = new Map(entries
+        .filter(entry => entry.name?.includes('.'))
+        .map(entry => [entry.name.slice(0, entry.name.lastIndexOf('.')), entry]));
+      downloadedFilesIndexed = true;
       let total = 0;
       const ids = [];
       for (const e of entries) {

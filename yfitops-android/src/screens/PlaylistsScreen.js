@@ -1,15 +1,53 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import Icon from '../components/Icon';
 import {
-  View, FlatList, StyleSheet, Alert, Text, TouchableOpacity,
+  View, FlatList, StyleSheet, Alert, Text, TouchableOpacity, BackHandler,
   Image, Modal, TextInput, ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MusicContext } from '../context/MusicContext';
 import { useSettings } from '../context/SettingsContext';
 import { useTheme } from '../theme';
 import { useT } from '../i18n';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 const COLORS = ['#1DB954','#E91E63','#9C27B0','#2196F3','#FF5722','#FF9800','#009688','#607D8B'];
+const songTitleCollator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+function sortPlaylistsByName(items) {
+  const normalizedName = item => String(item?.name || '').trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return [...items].sort((a, b) => {
+    const aName = normalizedName(a);
+    const bName = normalizedName(b);
+    const aStartsWithLetter = /^[a-z]/.test(aName);
+    const bStartsWithLetter = /^[a-z]/.test(bName);
+    if (aStartsWithLetter !== bStartsWithLetter) return aStartsWithLetter ? -1 : 1;
+    return aName < bName ? -1 : aName > bName ? 1 : 0;
+  });
+}
+
+function sortSongsByTitle(items) {
+  const normalizeTitle = song => String(song?.title || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  const leadingGroup = value => /^\d/.test(value) ? 0 : /^[a-z]/.test(value) ? 1 : 2;
+
+  return [...items].sort((a, b) => {
+    const aTitle = normalizeTitle(a);
+    const bTitle = normalizeTitle(b);
+    const groupDifference = leadingGroup(aTitle) - leadingGroup(bTitle);
+    if (groupDifference) return groupDifference;
+    const titleDifference = songTitleCollator.compare(aTitle, bTitle);
+    if (titleDifference) return titleDifference;
+    return String(a?.id || '').localeCompare(String(b?.id || ''));
+  });
+}
 
 function shuffle(arr) {
   const a = [...arr];
@@ -38,7 +76,7 @@ function PlaylistSongRow({ item, index, isActive, onPress, onFavoritePress, isFa
   const { downloadedSongIds } = useSettings();
   const t = useT();
   const styles = makeStyles(colors);
-  const cover = item.coverUrl ? `${SERVER_URL}${item.coverUrl}` : null;
+  const cover = resolveMediaUrl(SERVER_URL, item.coverUrl);
   const isDownloaded = downloadedSongIds.includes(String(item.id));
   const [justQueued, setJustQueued] = useState(false);
 
@@ -132,13 +170,13 @@ function SearchBar({ value, onChange, placeholder }) {
 }
 
 // ── Cabecera de playlist ──────────────────────────────────────
-function PlaylistDetailHeader({ playlist, songCount, color, onBack, onPlayAll, onShuffle, searchVisible, onToggleSearch, searchQuery, onSearchChange, isDownloaded }) {
+function PlaylistDetailHeader({ playlist, songCount, color, onBack, onPlayAll, onShuffle, searchVisible, onToggleSearch, searchQuery, onSearchChange, isDownloaded, topInset }) {
   const { colors } = useTheme();
   const t = useT();
   const styles = makeStyles(colors);
   return (
     <>
-      <View style={[styles.playlistHeader, { borderBottomColor: color + '44' }]}>
+      <View style={[styles.playlistHeader, { borderBottomColor: color + '44', paddingTop: topInset }]}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Text style={styles.backText}>{t('playlists.back')}</Text>
         </TouchableOpacity>
@@ -174,7 +212,7 @@ function FolderPlaylistCard({ playlist, onPress, SERVER_URL, isDownloaded }) {
   const { colors } = useTheme();
   const t = useT();
   const styles = makeStyles(colors);
-  const cover = playlist.coverUrl ? `${SERVER_URL}${playlist.coverUrl}` : null;
+  const cover = resolveMediaUrl(SERVER_URL, playlist.coverUrl);
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       <View style={{ position: 'relative' }}>
@@ -199,11 +237,10 @@ function FolderPlaylistCard({ playlist, onPress, SERVER_URL, isDownloaded }) {
 }
 
 // ── Tarjeta colección manual ──────────────────────────────────
-function CollectionCard({ playlist, songs, onPress, onLongPress, isDownloaded }) {
+function CollectionCard({ playlist, coverSongs, onPress, onLongPress, isDownloaded }) {
   const { colors } = useTheme();
   const t = useT();
   const styles = makeStyles(colors);
-  const coverSongs = songs.filter(s => playlist.songs?.includes(s.id)).slice(0, 4);
   const color = playlist.coverColor || '#1DB954';
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} onLongPress={onLongPress} activeOpacity={0.7}>
@@ -239,7 +276,7 @@ function CollectionCard({ playlist, songs, onPress, onLongPress, isDownloaded })
 }
 
 // ── Componente principal ──────────────────────────────────────
-export default function PlaylistsScreen() {
+export default function PlaylistsScreen({ onBackToLibrary }) {
   const {
     playlists, songs, createPlaylist, deletePlaylist, updatePlaylist,
     playSong, favorites, toggleFavorite, SERVER_URL, folderPlaylists,
@@ -249,6 +286,7 @@ export default function PlaylistsScreen() {
   const { colors } = useTheme();
   const t = useT();
   const styles = makeStyles(colors);
+  const insets = useSafeAreaInsets();
 
   const [view, setView]                         = useState('list');
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
@@ -260,7 +298,70 @@ export default function PlaylistsScreen() {
   const [searchVisible, setSearchVisible]       = useState(false);
   const [searchQuery, setSearchQuery]           = useState('');
 
-  const getPlaylistSongs = (pl) => songs.filter(s => pl.songs?.includes(s.id));
+  const orderedFolderPlaylists = useMemo(() => sortPlaylistsByName(folderPlaylists), [folderPlaylists]);
+  const orderedPlaylists = useMemo(() => sortPlaylistsByName(playlists), [playlists]);
+  const collectionCoverSongs = useMemo(() => {
+    const songsById = new Map(songs.map(song => [String(song.id), song]));
+    return new Map(playlists.map(playlist => [
+      String(playlist.id),
+      (playlist.songs || [])
+        .map(songId => songsById.get(String(songId)))
+        .filter(Boolean)
+        .slice(0, 4),
+    ]));
+  }, [playlists, songs]);
+
+  const selectedPlaylistSongs = useMemo(() => {
+    if (!selectedPlaylist) return [];
+    const playlistSongIds = new Set((selectedPlaylist.songs || []).map(String));
+    return sortSongsByTitle(songs.filter(song => playlistSongIds.has(String(song.id))));
+  }, [selectedPlaylist, songs]);
+  const selectedFolderSongs = useMemo(
+    () => sortSongsByTitle(selectedFolder?.songs || []),
+    [selectedFolder]
+  );
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredPlaylistSongs = useMemo(() => {
+    if (!normalizedSearchQuery) return selectedPlaylistSongs;
+    return selectedPlaylistSongs.filter(song =>
+      `${song.title || ''} ${song.artist || ''}`.toLowerCase().includes(normalizedSearchQuery)
+    );
+  }, [normalizedSearchQuery, selectedPlaylistSongs]);
+  const filteredFolderSongs = useMemo(() => {
+    if (!normalizedSearchQuery) return selectedFolderSongs;
+    return selectedFolderSongs.filter(song =>
+      `${song.title || ''} ${song.artist || ''}`.toLowerCase().includes(normalizedSearchQuery)
+    );
+  }, [normalizedSearchQuery, selectedFolderSongs]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (view === 'edit') {
+        setView(selectedPlaylist ? 'songs' : 'list');
+        return true;
+      }
+      if (view === 'songs') {
+        setSelectedPlaylist(null);
+        setView('list');
+        setSearchVisible(false);
+        setSearchQuery('');
+        return true;
+      }
+      if (view === 'folderDetail') {
+        setSelectedFolder(null);
+        setView('list');
+        setSearchVisible(false);
+        setSearchQuery('');
+        return true;
+      }
+      if (view === 'list' && onBackToLibrary) {
+        onBackToLibrary();
+        return true;
+      }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [view, selectedPlaylist, onBackToLibrary]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -288,7 +389,7 @@ export default function PlaylistsScreen() {
   if (view === 'edit') {
     return (
       <View style={styles.container}>
-        <View style={styles.editHeader}>
+        <View style={[styles.editHeader, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={() => setView('songs')} style={styles.backBtn}>
             <Text style={styles.backText}>{t('playlists.back')}</Text>
           </TouchableOpacity>
@@ -328,10 +429,8 @@ export default function PlaylistsScreen() {
   // ── Vista: colección manual ───────────────────────────────────
   if (view === 'songs' && selectedPlaylist) {
     const color = selectedPlaylist.coverColor || '#1DB954';
-    const allPlSongs = getPlaylistSongs(selectedPlaylist);
-    const filteredSongs = searchQuery.trim()
-      ? allPlSongs.filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase()) || s.artist.toLowerCase().includes(searchQuery.toLowerCase()))
-      : allPlSongs;
+    const allPlSongs = selectedPlaylistSongs;
+    const filteredSongs = filteredPlaylistSongs;
 
     // Se manda al servidor en cada heartbeat mientras suena una canción de
     // esta colección, para la estadística de "colección más escuchada".
@@ -341,6 +440,7 @@ export default function PlaylistsScreen() {
       <View style={styles.container}>
         <PlaylistDetailHeader
           playlist={selectedPlaylist} songCount={filteredSongs.length} color={color}
+          topInset={insets.top + 8}
           onBack={() => setView('list')}
           onPlayAll={() => allPlSongs.length > 0 && playSong(allPlSongs[0], allPlSongs, playlistContext)}
           onShuffle={() => { if (allPlSongs.length === 0) return; const s = shuffle(allPlSongs); playSong(s[0], s, playlistContext); }}
@@ -382,11 +482,8 @@ export default function PlaylistsScreen() {
 
   // ── Vista: carpeta ────────────────────────────────────────────
   if (view === 'folderDetail' && selectedFolder) {
-    const plSongs = selectedFolder.songs || [];
-    const cover = selectedFolder.coverUrl ? `${SERVER_URL}${selectedFolder.coverUrl}` : null;
-    const filteredFolderSongs = searchQuery.trim()
-      ? plSongs.filter(s => s.title?.toLowerCase().includes(searchQuery.toLowerCase()) || s.artist?.toLowerCase().includes(searchQuery.toLowerCase()))
-      : plSongs;
+    const plSongs = selectedFolderSongs;
+    const cover = resolveMediaUrl(SERVER_URL, selectedFolder.coverUrl);
 
     // Se manda al servidor en cada heartbeat mientras suena una canción de
     // esta colección, para la estadística de "colección más escuchada".
@@ -402,10 +499,10 @@ export default function PlaylistsScreen() {
                 <Icon name="musical-notes" size={80} color="#1ed760" />
               </View>
           }
-          <TouchableOpacity style={styles.heroBack} onPress={() => { setSelectedFolder(null); setView('list'); setSearchQuery(''); setSearchVisible(false); }}>
+          <TouchableOpacity style={[styles.heroBack, { top: insets.top + 12 }]} onPress={() => { setSelectedFolder(null); setView('list'); setSearchQuery(''); setSearchVisible(false); }}>
             <Icon name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.heroSearch, searchVisible && { backgroundColor: '#1ed76055' }]} onPress={() => { setSearchVisible(v => !v); setSearchQuery(''); }}>
+          <TouchableOpacity style={[styles.heroSearch, { top: insets.top + 12 }, searchVisible && { backgroundColor: '#1ed76055' }]} onPress={() => { setSearchVisible(v => !v); setSearchQuery(''); }}>
             <Text style={{ fontSize: 16 }}>🔍</Text>
           </TouchableOpacity>
         </View>
@@ -466,28 +563,38 @@ export default function PlaylistsScreen() {
   return (
     <View style={styles.container}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.mainScrollContent} showsVerticalScrollIndicator={true} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{t('playlists.title')}</Text>
-          <Text style={styles.headerSub}>{t('playlists.count', playlists.length)}</Text>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <View style={styles.headerText}>
+            <Text style={styles.headerTitle}>{t('playlists.title')}</Text>
+            <Text style={styles.headerSub}>{t('playlists.count', folderPlaylists.length + playlists.length)}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.headerAddBtn}
+            onPress={() => setCreateVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('playlists.newCollection')}
+          >
+            <Icon name="add" size={28} color="#000" />
+          </TouchableOpacity>
         </View>
 
-        {folderPlaylists.length > 0 && (
+        {orderedFolderPlaylists.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('playlists.fromFolders')}</Text>
             <View style={styles.cardGrid2}>
-              {folderPlaylists.map(item => (
+              {orderedFolderPlaylists.map(item => (
                 <FolderPlaylistCard key={item.id} playlist={item} SERVER_URL={SERVER_URL} onPress={() => openFolder(item)} isDownloaded={isPlaylistDownloaded(item.id)} />
               ))}
             </View>
           </View>
         )}
 
-        {playlists.length > 0 && <Text style={[styles.sectionTitle, { paddingHorizontal: 16, marginBottom: 8 }]}>{t('playlists.mine')}</Text>}
+        {orderedPlaylists.length > 0 && <Text style={[styles.sectionTitle, { paddingHorizontal: 16, marginBottom: 8 }]}>{t('playlists.mine')}</Text>}
 
-        {playlists.length > 0 ? (
+        {orderedPlaylists.length > 0 ? (
           <View style={[styles.cardGrid2, { paddingHorizontal: 12 }]}>
-            {playlists.map(item => (
-              <CollectionCard key={item.id} playlist={item} songs={songs} onPress={() => openPlaylist(item)} onLongPress={() => handleLongPress(item)} isDownloaded={isPlaylistDownloaded(item.id)} />
+            {orderedPlaylists.map(item => (
+              <CollectionCard key={item.id} playlist={item} coverSongs={collectionCoverSongs.get(String(item.id)) || []} onPress={() => openPlaylist(item)} onLongPress={() => handleLongPress(item)} isDownloaded={isPlaylistDownloaded(item.id)} />
             ))}
           </View>
         ) : (
@@ -498,10 +605,6 @@ export default function PlaylistsScreen() {
           </View>
         )}
       </ScrollView>
-
-      <TouchableOpacity style={styles.fab} onPress={() => setCreateVisible(true)}>
-        <Icon name="add" size={28} color="#000" />
-      </TouchableOpacity>
 
       <Modal visible={createVisible} transparent animationType="slide" onRequestClose={() => setCreateVisible(false)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setCreateVisible(false)}>
@@ -537,7 +640,7 @@ const makeStyles = (c) => StyleSheet.create({
   cardGrid2: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 12, rowGap: 12 },
   cardCoverImg: { width: '100%', aspectRatio: 1, borderRadius: 10 },
   card: { width: '48%', backgroundColor: c.bg3, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: c.borderStrong },
-  cardCover: { height: 120, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1 },
+  cardCover: { width: '100%', aspectRatio: 1, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1 },
   cardDownloadBadge: {
     position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: 11,
     backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center',
@@ -551,10 +654,12 @@ const makeStyles = (c) => StyleSheet.create({
   cardCount: { fontSize: 12, color: c.textMuted },
   cardMeta: { fontSize: 12, color: c.textMuted, marginTop: 2 },
   cardAccent: { height: 3, width: '100%' },
-  header: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingBottom: 8, gap: 12 },
+  headerText: { flex: 1, minWidth: 0 },
   headerTitle: { fontSize: 28, fontWeight: '800', color: c.text, letterSpacing: -0.5, flex: 1 },
   headerSub: { fontSize: 12, color: c.textDim, marginTop: 4, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-  playlistHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 52, paddingBottom: 10, borderBottomWidth: 1 },
+  headerAddBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' },
+  playlistHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 10, borderBottomWidth: 1 },
   playlistHeaderInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   playlistDot: { fontSize: 10 },
@@ -582,7 +687,7 @@ const makeStyles = (c) => StyleSheet.create({
   folderMeta: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 8 },
   folderName: { fontSize: 22, fontWeight: '800', color: c.text, marginBottom: 2 },
   folderStats: { color: c.textMuted, fontSize: 13 },
-  editHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 8 },
+  editHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
   editHint: { color: c.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', paddingHorizontal: 20, paddingVertical: 10 },
   editRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, marginHorizontal: 8, marginVertical: 1, borderRadius: 10 },
   editRowSelected: { backgroundColor: '#1DB95415' },
@@ -595,7 +700,6 @@ const makeStyles = (c) => StyleSheet.create({
   editArtist: { fontSize: 12, color: c.textFaint, marginTop: 2 },
   saveBtn: { backgroundColor: '#1DB954', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
   saveText: { color: '#000', fontWeight: '700', fontSize: 13 },
-  fab: { position: 'absolute', right: 20, bottom: 90, width: 52, height: 52, borderRadius: 26, backgroundColor: '#1DB954', justifyContent: 'center', alignItems: 'center', elevation: 8 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalBox: { backgroundColor: c.bg2, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 },
   modalTitle: { color: c.text, fontSize: 20, fontWeight: '800', marginBottom: 16 },

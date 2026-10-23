@@ -1,6 +1,6 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
 import Icon from '../components/Icon';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, BackHandler } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SongsScreen from './SongsScreen';
 import FavoritesScreen from './FavoritesScreen';
@@ -13,12 +13,28 @@ import { useT } from '../i18n';
 
 export default function MainScreen({ onLogout }) {
   const [tab, setTab] = useState('songs');
+  const tabRef = useRef(tab);
   const { currentSong, onLogout: ctxLogout } = useContext(MusicContext);
   const doLogout = onLogout || ctxLogout;
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const t = useT();
   const styles = makeStyles(colors);
+
+  const backToLibrary = useCallback(() => setTab('songs'), []);
+
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (tabRef.current === 'songs') return false;
+      backToLibrary();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [backToLibrary]);
 
   const TABS = [
     { key: 'songs', labelKey: 'nav.songs', icon: 'grid', iconActive: 'grid' },
@@ -30,7 +46,7 @@ export default function MainScreen({ onLogout }) {
   const renderScreen = () => {
     if (tab === 'songs') return <SongsScreen />;
     if (tab === 'favorites') return <FavoritesScreen />;
-    if (tab === 'playlists') return <PlaylistsScreen />;
+    if (tab === 'playlists') return <PlaylistsScreen onBackToLibrary={backToLibrary} />;
     return <SettingsScreen onLogout={doLogout} />;
   };
 
@@ -42,16 +58,27 @@ export default function MainScreen({ onLogout }) {
 
       {currentSong && <PlayerBar />}
 
-      <View style={[styles.nav, { paddingBottom: insets.bottom + 8 }]}>
-        {TABS.map(tabDef => {
-          const active = tab === tabDef.key;
-          return (
-            <TouchableOpacity key={tabDef.key} style={styles.navItem} onPress={() => setTab(tabDef.key)}>
-              <Icon name={active ? tabDef.iconActive : tabDef.icon} size={24} color={active ? '#1ed760' : colors.textFaint} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{t(tabDef.labelKey)}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={[styles.nav, { paddingBottom: insets.bottom }]}>
+        <View style={styles.navInner}>
+          {TABS.map(tabDef => {
+            const active = tab === tabDef.key;
+            return (
+              <TouchableOpacity
+                key={tabDef.key}
+                style={styles.navItem}
+                onPress={() => setTab(tabDef.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={t(tabDef.labelKey)}
+              >
+                <View style={styles.navIconWrap}>
+                  <Icon name={active ? tabDef.iconActive : tabDef.icon} size={22} color={active ? '#1ed760' : colors.textMuted} />
+                </View>
+                <Text style={[styles.navLabel, active && styles.navLabelActive]}>{t(tabDef.labelKey)}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -60,13 +87,18 @@ export default function MainScreen({ onLogout }) {
 const makeStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg0 },
   nav: {
-    flexDirection: 'row',
     backgroundColor: c.bg1,
     borderTopWidth: 1,
     borderTopColor: c.border,
-    paddingTop: 10,
   },
-  navItem: { flex: 1, alignItems: 'center', gap: 3 },
-  navLabel: { fontSize: 10, color: c.textFaint, fontWeight: '600', letterSpacing: 0.3 },
-  navLabelActive: { color: '#1ed760' },
+  navInner: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingTop: 5,
+    paddingBottom: 4,
+  },
+  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 50, gap: 1 },
+  navIconWrap: { width: 54, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  navLabel: { fontSize: 10, color: c.textMuted, fontWeight: '500' },
+  navLabelActive: { color: c.text, fontWeight: '700' },
 });

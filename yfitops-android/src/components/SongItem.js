@@ -6,6 +6,7 @@ import { MusicContext } from '../context/MusicContext';
 import { useSettings } from '../context/SettingsContext';
 import { useTheme } from '../theme';
 import { useT } from '../i18n';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 export default function SongItem({ song, isFavorite, onPress, onLongPress, onFavoritePress }) {
   const { updateSong, uploadCover, SERVER_URL, addToQueue } = useContext(MusicContext);
@@ -51,7 +52,7 @@ export default function SongItem({ song, isFavorite, onPress, onLongPress, onFav
     }
   };
 
-  const cover = song.coverUrl ? `${SERVER_URL}${song.coverUrl}` : null;
+  const cover = resolveMediaUrl(SERVER_URL, song.coverUrl);
 
   return (
     <>

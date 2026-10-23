@@ -228,7 +228,7 @@ export default function pcRoutes(app) {
 
   app.post('/pc/folderplaylists/sync', pcAuthMiddleware, async (req, res) => {
     try {
-      await syncPlaylistDir();
+      await syncPlaylistDir({ retryMissingCovers: true });
       const data = await readDataPl();
       res.json({ success: true, count: data.playlists.length });
     } catch (error) {
@@ -462,7 +462,7 @@ export default function pcRoutes(app) {
         }
       }
       await writeData(data);
-      await syncPlaylistDir();
+      await syncPlaylistDir({ retryMissingCovers: true });
 
       const dataPl = await readDataPl();
       const matchedInPlaylists = dataPl.playlists.reduce(

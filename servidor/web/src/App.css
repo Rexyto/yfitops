@@ -1424,6 +1424,11 @@ tbody td {
 .icon-action.danger:hover { color: var(--red); border-color: var(--red); }
 .icon-action input, .upload-control input { display: none; }
 .upload-control { flex: 0 0 auto; }
+.admin-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem; background: rgba(0, 0, 0, 0.72); }
+.admin-metadata-modal { width: min(100%, 440px); display: grid; gap: 1rem; padding: 1.5rem; border: 1px solid #2a352d; border-radius: 14px; background: #111713; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45); }
+.admin-metadata-modal h3 { margin: -0.65rem 0 0; }
+.admin-metadata-modal label { display: grid; gap: 0.4rem; color: #aab7ae; font-size: 0.82rem; }
+.admin-metadata-actions { display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 0.3rem; }
 .admin-login-shell { min-height: 100vh; display: grid; grid-template-columns: 1.1fr minmax(340px, 0.9fr); background: #0b0d0c; }
 .admin-login-visual { display: flex; flex-direction: column; justify-content: center; padding: clamp(2rem, 8vw, 8rem); background: radial-gradient(circle at 20% 30%, rgba(30,215,96,0.12), transparent 40%), #0e1510; border-right: 1px solid #263029; }
 .admin-login-visual h1 { max-width: 620px; margin: 1rem 0; font-size: clamp(3rem, 7vw, 7rem); letter-spacing: -0.1em; line-height: 0.88; }
